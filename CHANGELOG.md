@@ -24,7 +24,7 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 - Docker-Multi-Arch-Support (amd64, aarch64, armhf, armv7, i386)
 
 ### Geändert
-- Adaptiert von der ursprünglichen mediola2mqtt Implementierung
+- Adaptiert von der ursprünglichen mediola2mqtt Implementierung (https://github.com/andyboeh/mediola2mqtt)
 - Angepasst für Eltako MiniSafe2 API-Struktur
 - Verwendet HTTP GET statt POST für Befehle
 - Parst `{XC_SUC}` Response-Format
