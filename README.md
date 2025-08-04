@@ -22,7 +22,7 @@ Dieses Add-on stellt eine Brücke zwischen dem Eltako MiniSafe2 System und MQTT 
 
 1. Navigieren Sie zu **Einstellungen** → **Add-ons** → **Add-on Store**
 2. Klicken Sie auf die drei Punkte oben rechts → **Repositories**
-3. Fügen Sie diese Repository-URL hinzu: `https://github.com/Olgrov/eltako2mqtt`
+3. Fügen Sie diese Repository-URL hinzu: `[https://github.com/Olgrov/eltako2mqtt]`
 4. Aktualisieren Sie die Seite
 5. Suchen Sie nach "Eltako2MQTT" und klicken Sie auf **INSTALLIEREN**
 
