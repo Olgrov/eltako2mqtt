@@ -31,4 +31,3 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
 ### Sicherheit
 - Sichere Passwort-Übertragung über URL-Encoding
-- Konfiguration über Home Assistant Secrets möglich
