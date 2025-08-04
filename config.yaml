@@ -1,0 +1,48 @@
+name: "Eltako2MQTT"
+description: "Eltako MiniSafe2 to MQTT Bridge"
+version: "1.0.0"
+slug: "eltako2mqtt"
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+hassio_api: true
+hassio_role: default
+map:
+  - config:rw
+  - ssl
+options:
+  eltako:
+    host: "192.168.1.100"
+    password: ""
+    poll_interval: 15
+  mqtt:
+    host: "core-mosquitto"
+    port: 1883
+    username: ""
+    password: ""
+    client_id: "eltako2mqtt"
+  logging:
+    level: "INFO"
+schema:
+  eltako:
+    host: str
+    password: str
+    poll_interval: int(1,300)?
+  mqtt:
+    host: str
+    port: int(1,65535)?
+    username: str?
+    password: str?
+    client_id: str?
+  logging:
+    level: list(DEBUG|INFO|WARNING|ERROR)?
+services:
+  - mqtt:need
+ports:
+  8099/tcp: null
