@@ -31,7 +31,7 @@ Dieses Add-on stellt eine Brücke zwischen dem Eltako MiniSafe2 System und MQTT 
 ```yaml
 eltako:
   host: "192.168.1.100"          # IP-Adresse des Eltako MiniSafe2
-  password: "your_password"       # Passwort für das MiniSafe2
+  password: "your_password"      # Passwort für das MiniSafe2
   poll_interval: 30              # Abfrageintervall in Sekunden (1-300)
 
 mqtt:
