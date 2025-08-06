@@ -1,4 +1,4 @@
-aiohttp==3.8.5
+aiohttp==3.12.14
 paho-mqtt==1.6.1
 PyYAML==6.0.1
 requests
