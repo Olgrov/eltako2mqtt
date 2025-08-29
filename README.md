@@ -1,4 +1,4 @@
-# Eltako2MQTT - MiniSafe2 Home Assistant Add-on
+# Eltako2MQTT - Eltako MiniSafe2 Home Assistant Add-on
 
 ![Supports aarch64 Architecture][aarch64-shield]
 ![Supports amd64 Architecture][amd64-shield]
