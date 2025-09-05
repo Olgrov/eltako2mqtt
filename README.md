@@ -6,7 +6,7 @@
 ![Supports armv7 Architecture][armv7-shield]
 ![Supports i386 Architecture][i386-shield]
 
-Eltako MiniSafe2 to MQTT Bridge für Home Assistant
+[Eltako MiniSafe2 to MQTT Bridge für Home Assistant](https://github.com/Olgrov/eltako2mqtt)
 
 ## About
 
