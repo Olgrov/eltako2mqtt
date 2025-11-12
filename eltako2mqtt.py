@@ -310,6 +310,7 @@ class EltakoMiniSafe2Bridge:
         logger.info("Publishing MQTT discovery")
         self.loop = asyncio.get_running_loop()
         for sid, device in self.devices.items():
+            logger.info(f"Publishing device with sid [{sid}] and device [{device}]")
             device_type = device.get("data", "")
             device_info = {
                 "identifiers": [f"eltako_{sid}"],
