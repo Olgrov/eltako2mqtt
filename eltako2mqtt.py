@@ -256,6 +256,7 @@ class EltakoMiniSafe2Bridge:
         return round(level * 255 / 100)
 
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
+        logger.debug(f"Publishing device state of sid [{sid}] and device [{device}]")
         device_type = device.get("data", "")
         state = device.get("state", {})
         base = f"eltako/{sid}"
