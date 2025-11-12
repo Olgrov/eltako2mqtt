@@ -252,8 +252,16 @@ class EltakoMiniSafe2Bridge:
         await self.publish_device_state(sid, device)
 
     def eltako_level_to_mqtt_brightness(self, level: int) -> int:
-        level = max(0, min(level, 100))
-        return round(level * 255 / 100)
+        # Normalize level: accept None or non-numeric, clamp to [0,100] and convert to int
+        try:
+            if level is None:
+                lvl = 0
+            else:
+                lvl = int(round(float(level)))
+        except Exception:
+            lvl = 0
+        lvl = max(0, min(lvl, 100))
+        return round(lvl * 255 / 100)
 
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
         logger.debug(f"Publishing device state of sid [{sid}] and device [{device}]")
