@@ -12,10 +12,9 @@ RUN \
     py3-pip=~23.1 \
     py3-yaml=~6.0 \
   && pip3 install --no-cache-dir \
-    aiohttp==3.13.3 \
-    paho-mqtt==2.1.0 \
-    PyYAML==6.0.3 \
-    requests==2.32.3
+    aiohttp==3.8.5 \
+    paho-mqtt==1.6.1 \
+    requests
 
 # Copy data for add-on
 COPY run.sh /
@@ -30,6 +29,6 @@ LABEL \
   io.hass.description="Eltako MiniSafe2 to MQTT Bridge" \
   io.hass.arch="armhf|aarch64|i386|amd64|armv7" \
   io.hass.type="addon" \
-  io.hass.version="${BUILD_VERSION}"
+  io.hass.version="1.0.0"
 
 CMD [ "/run.sh" ]
