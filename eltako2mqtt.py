@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-"""Eltako MiniSafe2 MQTT Bridge
+"""
+Eltako MiniSafe2 MQTT Bridge
 
-Dimmerbefehle exakt: dimToX, on, off 	 keine Doppelbefehle!
+Dimmerbefehle exakt: dimToX, on, off – keine Doppelbefehle!
 """
 
 import asyncio
@@ -12,7 +13,6 @@ import logging
 import signal
 import sys
 import yaml
-import os
 from typing import Dict, Any, Optional
 import paho.mqtt.client as mqtt
 from urllib.parse import quote_plus
@@ -26,15 +26,6 @@ logger = logging.getLogger(__name__)
 
 class EltakoMiniSafe2Bridge:
     def __init__(self, config_file: str):
-        logger.info(f"Loading configuration from: {config_file}")
-        
-        # Check if config file exists
-        if not os.path.exists(config_file):
-            logger.error(f"Config file not found: {config_file}")
-            logger.error(f"Current working directory: {os.getcwd()}")
-            logger.error(f"Directory contents: {os.listdir(os.path.dirname(config_file) if os.path.dirname(config_file) else '.')}")
-            raise FileNotFoundError(f"Configuration file not found: {config_file}")
-        
         self.config = self.load_config(config_file)
         self.mqtt_client: Optional[mqtt.Client] = None
         self.session: Optional[aiohttp.ClientSession] = None
@@ -51,39 +42,21 @@ class EltakoMiniSafe2Bridge:
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
         self.poll_interval = self.eltako_config.get('poll_interval', 15)
-        
-        logger.info(f"Configuration loaded successfully")
-        logger.info(f"Eltako host: {self.eltako_config['host']}")
-        logger.info(f"MQTT host: {self.mqtt_config['host']}:{self.mqtt_config.get('port', 1883)}")
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         try:
             with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-                logger.info(f"Config file parsed successfully")
-                return config
-        except FileNotFoundError as e:
-            logger.error(f"Failed to load config: {e}")
-            raise
-        except yaml.YAMLError as e:
-            logger.error(f"Failed to parse YAML config: {e}")
-            raise
+                return yaml.safe_load(f)
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
-            raise
+            sys.exit(1)
 
     def signal_handler(self, signum, frame):
         logger.info(f"Received signal {signum}, shutting down...")
         self.running = False
 
     async def setup_mqtt(self):
-        # Use CallbackAPIVersion.VERSION1 to preserve the 1.x callback API semantics
-        # when running with paho-mqtt 2.x. This keeps existing on_connect/on_message
-        # callback signatures working without modification.
-        self.mqtt_client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION1,
-            client_id=self.mqtt_config.get('client_id', 'eltako2mqtt')
-        )
+        self.mqtt_client = mqtt.Client(client_id=self.mqtt_config.get('client_id', 'eltako2mqtt'))
         self.mqtt_client.on_connect = self.on_mqtt_connect
         self.mqtt_client.on_message = self.on_mqtt_message
         self.mqtt_client.on_disconnect = self.on_mqtt_disconnect
@@ -128,239 +101,362 @@ class EltakoMiniSafe2Bridge:
             sid = topic.split("/")[1]
             if self.loop:
                 now = time.monotonic()
-                last_time = self._last_dim_command_time.get(sid, 0)
-                
-                # Prevent rapid successive dimming commands
-                if now - last_time < 0.5:
-                    logger.debug(f"Ignoring rapid dimming command for {sid}")
-                    return
-                
-                self._last_dim_command_time[sid] = now
-                asyncio.run_coroutine_threadsafe(
-                    self.handle_mqtt_command(sid, payload),
-                    self.loop
-                )
-            else:
-                logger.error("No event loop set for scheduling command")
+                # Sperre 'on' Befehl, wenn innerhalb 1.5 Sekunden zuvor dimToX gesendet wurde
+                if payload.strip().lower() == 'on':
+                    last_dim_time = self._last_dim_command_time.get(sid, 0)
+                    if (now - last_dim_time) < 1.5:
+                        logger.info(f"Ignoring 'on' command for {sid} due to recent dimToX command")
+                        return
+                else:
+                    # Prüfe, ob Payload numerisch (dim-Level)
+                    if self.is_numeric(payload):
+                        self._last_dim_command_time[sid] = now
+
+                asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
     def on_mqtt_disconnect(self, client, userdata, rc):
-        if rc != 0:
-            logger.warning(f"Unexpected disconnection from MQTT broker: {rc}")
+        logger.warning(f"Disconnected from MQTT broker: {rc}")
 
-    async def handle_mqtt_command(self, sid: str, command: str):
+    @staticmethod
+    def is_numeric(value: str) -> bool:
         try:
-            device = self.devices.get(sid)
-            if not device:
-                logger.warning(f"Device {sid} not found")
-                return
+            float(value)
+            return True
+        except ValueError:
+            return False
 
-            # Construct the command
-            dim_value = None
-            if command == "on":
-                dim_value = 255
-            elif command == "off":
-                dim_value = 0
-            elif command.startswith("dimTo"):
+    async def handle_device_command(self, sid: str, command: str):
+        logger.info(f"Handling command for {sid}: '{command}'")
+        if sid not in self.devices:
+            logger.warning(f"Unknown device SID: {sid}")
+            return
+
+        device = self.devices[sid]
+        url = self.build_command_url(device, command)
+        if not url:
+            logger.warning(f"Ignoring unsupported command: {command}")
+            return
+
+        try:
+            async with self.session.get(url) as response:
+                text = await response.text()
+                if response.status == 200 and "{XC_SUC}" in text:
+                    logger.info(f"Command successful for {sid}: {command}")
+                    await self.update_device_state_immediate(sid, command)
+                else:
+                    logger.error(f"Command failed for {sid} ({command}): {text}")
+        except Exception as e:
+            logger.error(f"Error sending command to {sid}: {e}")
+
+    def build_command_url(self, device: Dict[str, Any], command: str) -> Optional[str]:
+        device_type = device.get('data', '')
+        address = device.get('adr', '')
+        if not device_type or not address:
+            return None
+        cmd_lower = command.strip().lower()
+
+        if 'dimmer' in device_type.lower():
+            if cmd_lower == "on":
+                cmd = "on"
+            elif cmd_lower == "off":
+                cmd = "off"
+            else:
                 try:
-                    dim_value = int(command[5:])
-                except (ValueError, IndexError):
-                    logger.error(f"Invalid dim command: {command}")
+                    val = float(command)
+                    if 0 <= val <= 255:
+                        level = round(val * 100 / 255)
+                    elif 0 <= val <= 100:
+                        level = int(val)
+                    else:
+                        logger.warning(f"Dimmer value out of range: {val}")
+                        return None
+                    if level == 0:
+                        cmd = "off"
+                    else:
+                        cmd = f"dimTo{level}"
+                except Exception:
+                    logger.warning(f"Invalid dimmer numeric command: {command}")
+                    return None
+            return self._build_url(address, cmd)
+        elif 'blind' in device_type.lower():
+            c = command.upper()
+            if c in ['OPEN', 'UP']:
+                cmd = 'up'
+            elif c in ['CLOSE', 'DOWN']:
+                cmd = 'down'
+            elif c == 'STOP':
+                cmd = 'stop'
+            else:
+                return None
+            return self._build_url(address, cmd)
+        elif 'switch' in device_type.lower():
+            c = command.lower()
+            if c in ['on', 'off']:
+                cmd = c
+            elif c == 'toggle':
+                cmd = 'toggle'
+            else:
+                return None
+            return self._build_url(address, cmd)
+        else:
+            logger.warning(f"Unknown device type {device_type} for command.")
+            return None
+
+    def _build_url(self, address: str, cmd_data: str) -> str:
+        return f"{self.base_url}?XC_FNC=SendSC&type=ENOCEAN&address={address}&data={cmd_data}&XC_PASS={quote_plus(self.password)}"
+
+    async def update_device_state_immediate(self, sid: str, command: str):
+        if sid not in self.devices:
+            return
+
+        device = self.devices[sid]
+        device_type = device.get('data', '')
+        cmd_lower = command.strip().lower()
+        val_numeric = None
+
+        try:
+            val_numeric = float(command)
+            is_numeric = True
+        except Exception:
+            is_numeric = False
+
+        if 'dimmer' in device_type.lower():
+            if cmd_lower == 'on':
+                device['state']['state'] = 'on'
+                if device['state'].get('level', 0) == 0:
+                    device['state']['level'] = 100
+            elif cmd_lower == 'off':
+                device['state']['state'] = 'off'
+                device['state']['level'] = 0
+            elif is_numeric:
+                if 0 <= val_numeric <= 255:
+                    level = round(val_numeric * 100 / 255)
+                elif 0 <= val_numeric <= 100:
+                    level = int(val_numeric)
+                else:
                     return
+                device['state']['level'] = level
+                device['state']['state'] = 'on' if level > 0 else 'off'
+        elif 'switch' in device_type.lower():
+            if cmd_lower in ['on', 'off']:
+                device['state']['state'] = cmd_lower
+            elif cmd_lower == 'toggle':
+                current = device['state'].get('state', 'off')
+                device['state']['state'] = 'off' if current == 'on' else 'on'
+        elif 'blind' in device_type.lower():
+            if command.upper() in ['OPEN', 'UP']:
+                device['state']['pos'] = 0
+            elif command.upper() in ['CLOSE', 'DOWN']:
+                device['state']['pos'] = 100
 
-            if dim_value is not None:
-                await self.send_command(sid, dim_value)
-        except Exception as e:
-            logger.error(f"Error handling MQTT command: {e}")
+        await self.publish_device_state(sid, device)
 
-    async def send_command(self, sid: str, value: int):
-        """Send a command to the Eltako device"""
-        try:
-            # URL encode the password
-            encoded_pwd = quote_plus(self.password)
-            url = f"{self.base_url}?pwd={encoded_pwd}&sid={sid}&command=dimToX&value={value}"
-            
-            async with self.session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                if response.status == 200:
-                    logger.info(f"Command sent to device {sid}: dimToX({value})")
-                else:
-                    logger.error(f"Failed to send command to device {sid}: {response.status}")
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout sending command to device {sid}")
-        except Exception as e:
-            logger.error(f"Error sending command to device {sid}: {e}")
+    def eltako_level_to_mqtt_brightness(self, level: int) -> int:
+        level = max(0, min(level, 100))
+        return round(level * 255 / 100)
 
-    async def fetch_devices(self):
-        """Fetch device list from Eltako device"""
-        try:
-            encoded_pwd = quote_plus(self.password)
-            url = f"http://{self.eltako_config['host']}/list?pwd={encoded_pwd}"
-            
-            logger.debug(f"Fetching devices from: {url}")
-            
-            async with self.session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                if response.status == 200:
-                    content = await response.text()
-                    logger.debug(f"Eltako response status: 200")
-                    logger.debug(f"Response content length: {len(content)} bytes")
-                    
-                    # Log first 500 chars of response for debugging
-                    if content:
-                        logger.debug(f"Response preview: {content[:500]}")
-                    
-                    self.devices = self.parse_device_list(content)
-                    logger.info(f"Fetched {len(self.devices)} devices from Eltako")
-                    
-                    if len(self.devices) == 0:
-                        logger.warning("No devices found in Eltako response")
-                        logger.warning("Possible causes:")
-                        logger.warning("  1. Eltako device at 192.168.2.110 is offline or unreachable")
-                        logger.warning("  2. Password is incorrect")
-                        logger.warning("  3. No devices configured in Eltako device")
-                        logger.warning("  4. Device response format changed")
-                    
-                    return True
-                else:
-                    logger.error(f"Failed to fetch devices: HTTP {response.status}")
-                    logger.error(f"Response text: {await response.text()}")
-                    return False
-        except asyncio.TimeoutError:
-            logger.error("Timeout fetching device list from Eltako")
-            logger.error("Check if Eltako device at 192.168.2.110 is reachable and powered on")
-            return False
-        except aiohttp.ClientConnectorError as e:
-            logger.error(f"Connection error to Eltako device: {e}")
-            logger.error(f"Cannot connect to http://{self.eltako_config['host']}/list")
-            logger.error("Verify IP address and network connectivity")
-            return False
-        except Exception as e:
-            logger.error(f"Error fetching device list: {e}")
-            return False
+    async def publish_device_state(self, sid: str, device: Dict[str, Any]):
+        device_type = device.get("data", "")
+        state = device.get("state", {})
+        base = f"eltako/{sid}"
+        rssi = state.get("rssiPercentage", 0)
+        self.mqtt_client.publish(f"{base}/rssi", rssi, retain=True)
 
-    def parse_device_list(self, html_content: str) -> Dict[str, Any]:
-        """Parse device list from Eltako HTML response"""
-        devices = {}
-        
-        if not html_content or len(html_content) == 0:
-            logger.warning("Empty response from Eltako device")
-            return devices
-        
-        lines = html_content.split('\n')
-        logger.debug(f"Parsing {len(lines)} lines from Eltako response")
-        
-        for i, line in enumerate(lines):
-            if '<tr>' in line or 'device' in line.lower():
-                logger.debug(f"Line {i}: {line[:100]}")
-                
-                if '<tr>' in line:
-                    # Parse table row for device info
-                    parts = line.split('|')
-                    if len(parts) >= 3:
-                        try:
-                            sid = parts[0].strip()
-                            name = parts[1].strip()
-                            # Device found
-                            devices[sid] = {
-                                'name': name,
-                                'sid': sid
-                            }
-                            logger.debug(f"Found device: {sid} = {name}")
-                        except (IndexError, ValueError):
-                            continue
-        
-        return devices
+        if "blind" in device_type.lower():
+            pos = state.get("pos", 0)
+            self.mqtt_client.publish(f"{base}/state", pos, retain=True)
+            sync = state.get("sync", False)
+            self.mqtt_client.publish(f"{base}/sync", sync, retain=True)
+            rv = state.get("rv", 0)
+            rt = state.get("rt", 0)
+            self.mqtt_client.publish(f"{base}/rv", rv, retain=True)
+            self.mqtt_client.publish(f"{base}/rt", rt, retain=True)
+        elif "switch" in device_type.lower():
+            st = state.get("state", "off")
+            self.mqtt_client.publish(f"{base}/state", st, retain=True)
+        elif "dimmer" in device_type.lower():
+            st = state.get("state", "off")
+            level = state.get("level", 0)
+            brightness = self.eltako_level_to_mqtt_brightness(level)
+            self.mqtt_client.publish(f"{base}/state", st, retain=True)
+            self.mqtt_client.publish(f"{base}/brightness", brightness, retain=True)
+        elif "weather" in device_type.lower():
+            vals = {
+                "wind": state.get("wind", 0),
+                "rain": str(state.get("rain_state", False)).lower(),
+                "temperature": state.get("temperature", 0),
+                "illumination": state.get("illumination", 0),
+                "illumination_east": state.get("s1", 0),
+                "illumination_south": state.get("s2", 0),
+                "illumination_west": state.get("s3", 0),
+            }
+            for k, v in vals.items():
+                # S1/S2/S3: erst mit 1000 multiplizieren, dann runden
+                if k in ("illumination_east", "illumination_south", "illumination_west"):
+                    try:
+                        v = float(v) * 1000
+                        v = int(round(v))
+                    except Exception:
+                        v = 0
+                # zentrale Illumination: nur runden auf int
+                elif k == "illumination":
+                    try:
+                        v = int(round(float(v)))
+                    except Exception:
+                        v = 0
+                self.mqtt_client.publish(f"{base}/{k}", v, retain=True)
 
     async def publish_discovery(self):
-        """Publish Home Assistant discovery messages"""
-        try:
-            for sid, device in self.devices.items():
-                # Create discovery message for Home Assistant
-                discovery_topic = f"homeassistant/light/{sid}/config"
-                discovery_payload = {
-                    "name": device.get('name', f"Eltako {sid}"),
-                    "unique_id": f"eltako_{sid}",
+        logger.info("Publishing MQTT discovery")
+        self.loop = asyncio.get_running_loop()
+        for sid, device in self.devices.items():
+            device_type = device.get("data", "")
+            device_info = {
+                "identifiers": [f"eltako_{sid}"],
+                "name": f"Eltako {sid}",
+                "model": device_type,
+                "manufacturer": "Eltako",
+                "via_device": "eltako_minisafe2"
+            }
+            if "blind" in device_type.lower():
+                config = {
+                    "name": f"Eltako Blind {sid}",
+                    "unique_id": f"eltako_blind_{sid}",
+                    "device_class": "blind",
+                    "command_topic": f"eltako/{sid}/set",
+                    "position_topic": f"eltako/{sid}/state",
+                    "position_closed": 100,
+                    "position_open": 0,
+                    "payload_open": "OPEN",
+                    "payload_close": "CLOSE",
+                    "payload_stop": "STOP",
+                    "device": device_info
+                }
+                topic = f"homeassistant/cover/eltako_blind_{sid}/config"
+                self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+            elif "switch" in device_type.lower():
+                config = {
+                    "name": f"Eltako Switch {sid}",
+                    "unique_id": f"eltako_switch_{sid}",
                     "command_topic": f"eltako/{sid}/set",
                     "state_topic": f"eltako/{sid}/state",
-                    "brightness": True,
-                    "schema": "json",
-                    "device": {
-                        "identifiers": [f"eltako_{sid}"],
-                        "name": f"Eltako {sid}"
-                    }
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "device": device_info
                 }
-                
-                self.mqtt_client.publish(
-                    discovery_topic,
-                    json.dumps(discovery_payload),
-                    retain=True
-                )
-                logger.debug(f"Published discovery for device {sid}")
-        except Exception as e:
-            logger.error(f"Error publishing discovery: {e}")
+                topic = f"homeassistant/switch/eltako_switch_{sid}/config"
+                self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+            elif "dimmer" in device_type.lower():
+                config = {
+                    "name": f"Eltako Dimmer {sid}",
+                    "unique_id": f"eltako_dimmer_{sid}",
+                    "command_topic": f"eltako/{sid}/set",
+                    "state_topic": f"eltako/{sid}/state",
+                    "brightness_command_topic": f"eltako/{sid}/set",
+                    "brightness_state_topic": f"eltako/{sid}/brightness",
+                    "brightness_scale": 255,
+                    "payload_on": "on",
+                    "payload_off": "off",
+                    "device": device_info
+                }
+                topic = f"homeassistant/light/eltako_dimmer_{sid}/config"
+                self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+            elif "weather" in device_type.lower():
+                weather_sensors = [
+                    ("wind", "Wind", "m/s", None, "sensor"),
+                    ("rain", "Rain", None, None, "sensor"),
+                    ("temperature", "Temperature", "°C", "temperature", "sensor"),
+                    ("illumination", "Illumination", "lx", "illuminance", "sensor"),
+                    ("illumination_east", "Illumination East", "lx", "illuminance", "sensor"),
+                    ("illumination_south", "Illumination South", "lx", "illuminance", "sensor"),
+                    ("illumination_west", "Illumination West", "lx", "illuminance", "sensor")
+                ]
+                for key, name, unit, devclass, platform in weather_sensors:
+                    config = {
+                        "name": name,
+                        "unique_id": f"eltako_weather_{key}_{sid}",
+                        "state_topic": f"eltako/{sid}/{key}",
+                        "device": device_info
+                    }
+                    if unit:
+                        config["unit_of_measurement"] = unit
+                    if devclass:
+                        config["device_class"] = devclass
+                    if key == "rain":
+                        config["icon"] = "mdi:weather-pouring"
+                    if "wind" in key:
+                        config["icon"] = "mdi:weather-windy"
+                    topic = f"homeassistant/{platform}/eltako_weather_{key}_{sid}/config"
+                    self.mqtt_client.publish(topic, json.dumps(config), retain=True)
 
     async def poll_devices(self):
-        """Periodically poll device status from Eltako"""
-        poll_count = 0
         while self.running:
             try:
-                poll_count += 1
-                logger.debug(f"Device poll #{poll_count}")
-                await self.fetch_devices()
+                devices = await self.fetch_device_states()
+                if devices:
+                    for device in devices:
+                        sid = device.get("sid")
+                        if sid:
+                            self.devices[sid] = device
+                            await self.publish_device_state(sid, device)
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
-                logger.error(f"Error in polling loop: {e}")
-                await asyncio.sleep(5)
+                logger.error(f"Polling error: {e}")
+                await asyncio.sleep(self.poll_interval)
+
+    async def fetch_device_states(self) -> Optional[Dict[str, Any]]:
+        url = f"{self.base_url}?XC_FNC=GetStates&XC_PASS={quote_plus(self.password)}"
+        try:
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    if text.startswith("{XC_SUC}"):
+                        json_data = text[8:]
+                        return json.loads(json_data)
+                    logger.error(f"Unexpected response: {text}")
+                else:
+                    logger.error(f"HTTP error {response.status}")
+        except Exception as e:
+            logger.error(f"Error fetching device states: {e}")
+        return None
 
     async def run(self):
-        """Main run loop"""
-        self.running = True
+        logger.info("Starting Eltako2MQTT Bridge")
         self.loop = asyncio.get_event_loop()
-        
-        # Create aiohttp session
-        self.session = aiohttp.ClientSession()
-        
+        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         try:
-            # Setup MQTT
             await self.setup_mqtt()
-            
-            # Initial device fetch
-            await self.fetch_devices()
-            
-            # Start polling
-            polling_task = asyncio.create_task(self.poll_devices())
-            
-            # Keep running
-            while self.running:
-                await asyncio.sleep(1)
-            
-            polling_task.cancel()
+            devices = await self.fetch_device_states()
+            if not devices:
+                logger.error("No devices found")
+                return
+            for device in devices:
+                sid = device.get("sid")
+                if sid:
+                    self.devices[sid] = device
+                    logger.info(f"Found device {sid}: {device.get('data')}")
+            await self.publish_discovery()
+            for sid, device in self.devices.items():
+                await self.publish_device_state(sid, device)
+            self.running = True
+            await self.poll_devices()
         except Exception as e:
-            logger.error(f"Error in run: {e}")
+            logger.error(f"Runtime error: {e}")
         finally:
             if self.mqtt_client:
                 self.mqtt_client.loop_stop()
                 self.mqtt_client.disconnect()
             if self.session:
                 await self.session.close()
-            self.running = False
+            logger.info("Bridge stopped")
 
 async def main():
-    """Main entry point"""
-    # Support both ways of being called
-    if len(sys.argv) > 1:
-        config_file = sys.argv[1]
-    else:
-        config_file = "/config/eltako2mqtt/options.yaml"
-    
-    logger.info(f"Using config file: {config_file}")
-    
-    try:
-        bridge = EltakoMiniSafe2Bridge(config_file)
-        await bridge.run()
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
+    if len(sys.argv) != 2:
+        print("Usage: python3 eltako2mqtt.py ")
         sys.exit(1)
+    config_file = sys.argv[1]
+    bridge = EltakoMiniSafe2Bridge(config_file)
+    await bridge.run()
 
 if __name__ == "__main__":
     asyncio.run(main())
