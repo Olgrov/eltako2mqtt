@@ -10,6 +10,8 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 - Abhängigkeiten aktualisiert:
   - `PyYAML` auf 6.0.3 (Dependabot, merged PR #4).
   - `paho-mqtt` auf 2.1.0 (Dependabot, PR #5) — WICHTIG: paho-mqtt 2.x enthält breaking changes; siehe Hinweise unten.
+  - `requests` auf 2.32.3 — gepinnte Version für reproduzierbare Builds.
+- Dockerfile aktualisiert: Explizite Versionspinning aller Abhängigkeiten für Konsistenz mit `requirements.txt`.
 - Wartungs- und Stabilitätsupdates an Container/Build-Setup.
 
 ### Sicherheit
@@ -23,7 +25,7 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 ## [1.0.1] - 2026-01-06
 
 ### Geändert
-- Abhängigkeiten aktualisiert: `aiohttp` auf 3.13.3 (Dependabot).\
+- Abhängigkeiten aktualisiert: `aiohttp` auf 3.13.3 (Dependabot).
 - Kleines Wartungs- und Stabilitätsupdate; keine funktionalen Änderungen.
 - Merge von Pull Request #3 (Dependabot) zur Aktualisierung von Sicherheits- und Wartungsabhängigkeiten.
 
