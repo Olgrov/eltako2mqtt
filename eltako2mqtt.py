@@ -12,6 +12,7 @@ import logging
 import signal
 import sys
 import yaml
+import os
 from typing import Dict, Any, Optional
 import paho.mqtt.client as mqtt
 from urllib.parse import quote_plus
@@ -25,6 +26,15 @@ logger = logging.getLogger(__name__)
 
 class EltakoMiniSafe2Bridge:
     def __init__(self, config_file: str):
+        logger.info(f"Loading configuration from: {config_file}")
+        
+        # Check if config file exists
+        if not os.path.exists(config_file):
+            logger.error(f"Config file not found: {config_file}")
+            logger.error(f"Current working directory: {os.getcwd()}")
+            logger.error(f"Directory contents: {os.listdir(os.path.dirname(config_file) if os.path.dirname(config_file) else '.')}")
+            raise FileNotFoundError(f"Configuration file not found: {config_file}")
+        
         self.config = self.load_config(config_file)
         self.mqtt_client: Optional[mqtt.Client] = None
         self.session: Optional[aiohttp.ClientSession] = None
@@ -41,14 +51,26 @@ class EltakoMiniSafe2Bridge:
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
         self.poll_interval = self.eltako_config.get('poll_interval', 15)
+        
+        logger.info(f"Configuration loaded successfully")
+        logger.info(f"Eltako host: {self.eltako_config['host']}")
+        logger.info(f"MQTT host: {self.mqtt_config['host']}:{self.mqtt_config.get('port', 1883)}")
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         try:
             with open(config_file, 'r') as f:
-                return yaml.safe_load(f)
+                config = yaml.safe_load(f)
+                logger.info(f"Config file parsed successfully")
+                return config
+        except FileNotFoundError as e:
+            logger.error(f"Failed to load config: {e}")
+            raise
+        except yaml.YAMLError as e:
+            logger.error(f"Failed to parse YAML config: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
-            sys.exit(1)
+            raise
 
     def signal_handler(self, signum, frame):
         logger.info(f"Received signal {signum}, shutting down...")
@@ -285,7 +307,13 @@ class EltakoMiniSafe2Bridge:
 
 async def main():
     """Main entry point"""
-    config_file = "/config/eltako2mqtt/options.yaml"
+    # Support both ways of being called
+    if len(sys.argv) > 1:
+        config_file = sys.argv[1]
+    else:
+        config_file = "/config/eltako2mqtt/options.yaml"
+    
+    logger.info(f"Using config file: {config_file}")
     
     try:
         bridge = EltakoMiniSafe2Bridge(config_file)
