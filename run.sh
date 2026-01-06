@@ -4,6 +4,10 @@ set -e
 
 # Configuration
 CONFIG_PATH=/data/options.json
+OUTPUT_CONFIG=/config/eltako2mqtt/options.yaml
+
+# Create config directory if it doesn't exist
+mkdir -p /config/eltako2mqtt
 
 # Parse configuration
 ELTAKO_HOST=$(bashio::config 'eltako.host')
@@ -35,7 +39,7 @@ if bashio::var.is_empty "${MQTT_HOST}"; then
 fi
 
 # Create configuration file for the Python script
-cat > /tmp/eltako2mqtt.yaml << EOF
+cat > "${OUTPUT_CONFIG}" << EOF
 eltako:
   host: "${ELTAKO_HOST}"
   password: "${ELTAKO_PASSWORD}"
@@ -49,11 +53,11 @@ EOF
 
 # Add MQTT credentials if provided
 if ! bashio::var.is_empty "${MQTT_USERNAME}"; then
-    echo "  username: "${MQTT_USERNAME}"" >> /tmp/eltako2mqtt.yaml
+    echo "  username: \"${MQTT_USERNAME}\"" >> "${OUTPUT_CONFIG}"
 fi
 
 if ! bashio::var.is_empty "${MQTT_PASSWORD}"; then
-    echo "  password: "${MQTT_PASSWORD}"" >> /tmp/eltako2mqtt.yaml
+    echo "  password: \"${MQTT_PASSWORD}\"" >> "${OUTPUT_CONFIG}"
 fi
 
 # Set log level
@@ -67,4 +71,4 @@ bashio::log.info "MQTT Host: ${MQTT_HOST}:${MQTT_PORT}"
 bashio::log.info "Starting Python bridge..."
 
 # Start the Python script
-exec python3 /eltako2mqtt.py /tmp/eltako2mqtt.yaml
+exec python3 /eltako2mqtt.py "${OUTPUT_CONFIG}"
