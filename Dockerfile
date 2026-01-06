@@ -12,8 +12,8 @@ RUN \
     py3-pip=~23.1 \
     py3-yaml=~6.0 \
   && pip3 install --no-cache-dir \
-    aiohttp==3.8.5 \
-    paho-mqtt==1.6.1 \
+    aiohttp==3.13.3 \
+    paho-mqtt==2.1.0 \
     requests
 
 # Copy data for add-on
