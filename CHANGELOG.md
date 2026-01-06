@@ -4,6 +4,24 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.0.3-mqtt2.1.0-dev] - 2026-01-06 (TEST BRANCH)
+
+### Experimental
+- **TEST BRANCH**: paho-mqtt aktualisiert von 1.6.1 auf 2.1.0
+- Refaktoriert für CallbackAPIVersion.VERSION1 (backward-compatible)
+- Alle Callback-Funktionen mit `properties` Parameter erweitert
+- Code-Dokumentation für MQTT 2.1.0 Kompatibilität hinzugefügt
+
+### Breaking Changes
+- Erfordert paho-mqtt 2.1.0 oder höher (nicht abwärtskompatibel zu 1.6.1)
+- Client-Erstellung mit `callback_api_version` Parameter erforderlich
+
+### Testing
+- ⚠️ WARNUNG: Dies ist ein Testbranch - NUR für Testing verwenden!
+- Gründliches Testing erforderlich bevor in Production
+
+---
+
 ## [1.0.2] - 2026-01-06
 
 ### Geändert
@@ -16,7 +34,7 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 ## [1.0.1] - 2026-01-06
 
 ### Geändert
-- Abhängigkeiten aktualisiert: `aiohttp` auf 3.13.3 (Dependabot).\
+- Abhängigkeiten aktualisiert: `aiohttp` auf 3.13.3 (Dependabot).
 - Kleines Wartungs- und Stabilitätsupdate; keine funktionalen Änderungen.
 - Merge von Pull Request #3 (Dependabot) zur Aktualisierung von Sicherheits- und Wartungsabhängigkeiten.
 
