@@ -195,17 +195,42 @@ class EltakoMiniSafe2Bridge:
             encoded_pwd = quote_plus(self.password)
             url = f"http://{self.eltako_config['host']}/list?pwd={encoded_pwd}"
             
+            logger.debug(f"Fetching devices from: {url}")
+            
             async with self.session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 if response.status == 200:
                     content = await response.text()
+                    logger.debug(f"Eltako response status: 200")
+                    logger.debug(f"Response content length: {len(content)} bytes")
+                    
+                    # Log first 500 chars of response for debugging
+                    if content:
+                        logger.debug(f"Response preview: {content[:500]}")
+                    
                     self.devices = self.parse_device_list(content)
                     logger.info(f"Fetched {len(self.devices)} devices from Eltako")
+                    
+                    if len(self.devices) == 0:
+                        logger.warning("No devices found in Eltako response")
+                        logger.warning("Possible causes:")
+                        logger.warning("  1. Eltako device at 192.168.2.110 is offline or unreachable")
+                        logger.warning("  2. Password is incorrect")
+                        logger.warning("  3. No devices configured in Eltako device")
+                        logger.warning("  4. Device response format changed")
+                    
                     return True
                 else:
                     logger.error(f"Failed to fetch devices: HTTP {response.status}")
+                    logger.error(f"Response text: {await response.text()}")
                     return False
         except asyncio.TimeoutError:
             logger.error("Timeout fetching device list from Eltako")
+            logger.error("Check if Eltako device at 192.168.2.110 is reachable and powered on")
+            return False
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Connection error to Eltako device: {e}")
+            logger.error(f"Cannot connect to http://{self.eltako_config['host']}/list")
+            logger.error("Verify IP address and network connectivity")
             return False
         except Exception as e:
             logger.error(f"Error fetching device list: {e}")
@@ -214,23 +239,33 @@ class EltakoMiniSafe2Bridge:
     def parse_device_list(self, html_content: str) -> Dict[str, Any]:
         """Parse device list from Eltako HTML response"""
         devices = {}
-        lines = html_content.split('\n')
         
-        for line in lines:
-            if '<tr>' in line:
-                # Parse table row for device info
-                parts = line.split('|')
-                if len(parts) >= 3:
-                    try:
-                        sid = parts[0].strip()
-                        name = parts[1].strip()
-                        # Device found
-                        devices[sid] = {
-                            'name': name,
-                            'sid': sid
-                        }
-                    except (IndexError, ValueError):
-                        continue
+        if not html_content or len(html_content) == 0:
+            logger.warning("Empty response from Eltako device")
+            return devices
+        
+        lines = html_content.split('\n')
+        logger.debug(f"Parsing {len(lines)} lines from Eltako response")
+        
+        for i, line in enumerate(lines):
+            if '<tr>' in line or 'device' in line.lower():
+                logger.debug(f"Line {i}: {line[:100]}")
+                
+                if '<tr>' in line:
+                    # Parse table row for device info
+                    parts = line.split('|')
+                    if len(parts) >= 3:
+                        try:
+                            sid = parts[0].strip()
+                            name = parts[1].strip()
+                            # Device found
+                            devices[sid] = {
+                                'name': name,
+                                'sid': sid
+                            }
+                            logger.debug(f"Found device: {sid} = {name}")
+                        except (IndexError, ValueError):
+                            continue
         
         return devices
 
@@ -264,8 +299,11 @@ class EltakoMiniSafe2Bridge:
 
     async def poll_devices(self):
         """Periodically poll device status from Eltako"""
+        poll_count = 0
         while self.running:
             try:
+                poll_count += 1
+                logger.debug(f"Device poll #{poll_count}")
                 await self.fetch_devices()
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
