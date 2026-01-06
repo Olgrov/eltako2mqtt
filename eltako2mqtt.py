@@ -4,6 +4,8 @@
 Eltako MiniSafe2 MQTT Bridge
 
 Dimmerbefehle exakt: dimToX, on, off – keine Doppelbefehle!
+
+Upgraded for paho-mqtt 2.1.0 with CallbackAPIVersion.VERSION1
 """
 
 import asyncio
@@ -56,7 +58,11 @@ class EltakoMiniSafe2Bridge:
         self.running = False
 
     async def setup_mqtt(self):
-        self.mqtt_client = mqtt.Client(client_id=self.mqtt_config.get('client_id', 'eltako2mqtt'))
+        # Create MQTT client with CallbackAPIVersion.VERSION1 for backward compatibility
+        self.mqtt_client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+            client_id=self.mqtt_config.get('client_id', 'eltako2mqtt')
+        )
         self.mqtt_client.on_connect = self.on_mqtt_connect
         self.mqtt_client.on_message = self.on_mqtt_message
         self.mqtt_client.on_disconnect = self.on_mqtt_disconnect
@@ -73,12 +79,22 @@ class EltakoMiniSafe2Bridge:
                 60
             )
             self.mqtt_client.loop_start()
-            logger.info("MQTT client connected")
+            logger.info("MQTT client connected (paho-mqtt 2.1.0)")
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             raise
 
-    def on_mqtt_connect(self, client, userdata, flags, rc):
+    def on_mqtt_connect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int, properties=None):
+        """
+        Callback for when the client receives a CONNECT response from the server.
+        
+        Args:
+            client: MQTT client instance
+            userdata: User data (usually None)
+            flags: Response flags sent by the broker
+            rc: Connection result code (0 = success)
+            properties: MQTT5 properties (for VERSION2 compatibility, not used in VERSION1)
+        """
         if rc == 0:
             logger.info("Connected to MQTT broker")
             client.subscribe("eltako/+/set")
@@ -86,7 +102,15 @@ class EltakoMiniSafe2Bridge:
         else:
             logger.error(f"Failed to connect to MQTT broker: {rc}")
 
-    def on_mqtt_message(self, client, userdata, msg):
+    def on_mqtt_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
+        """
+        Callback for when a PUBLISH message is received from the server.
+        
+        Args:
+            client: MQTT client instance
+            userdata: User data (usually None)
+            msg: MQTT message with topic and payload
+        """
         topic = msg.topic
         payload = msg.payload.decode()
         logger.debug(f"Received MQTT message: {topic} = {payload}")
@@ -114,7 +138,17 @@ class EltakoMiniSafe2Bridge:
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
-    def on_mqtt_disconnect(self, client, userdata, rc):
+    def on_mqtt_disconnect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int, properties=None):
+        """
+        Callback for when the client disconnects from the broker.
+        
+        Args:
+            client: MQTT client instance
+            userdata: User data (usually None)
+            flags: Response flags sent by the broker
+            rc: Disconnect result code
+            properties: MQTT5 properties (for VERSION2 compatibility, not used in VERSION1)
+        """
         logger.warning(f"Disconnected from MQTT broker: {rc}")
 
     @staticmethod
@@ -421,7 +455,7 @@ class EltakoMiniSafe2Bridge:
         return None
 
     async def run(self):
-        logger.info("Starting Eltako2MQTT Bridge")
+        logger.info("Starting Eltako2MQTT Bridge (paho-mqtt 2.1.0)")
         self.loop = asyncio.get_event_loop()
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         try:
