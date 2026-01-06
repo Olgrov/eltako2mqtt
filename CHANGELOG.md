@@ -4,6 +4,15 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.0.2] - 2026-01-06
+
+### Geändert
+- Dependencies aktualisiert: `PyYAML` von 6.0.1 auf 6.0.3 für neueste Stabilitätsverbesserungen.
+- Dockerfile synchronisiert mit requirements.txt für konsistente Versionierung.
+
+### Sicherheit
+- PyYAML Update für neueste Parser-Verbesserungen und Stabilitäts-Patches.
+
 ## [1.0.1] - 2026-01-06
 
 ### Geändert
