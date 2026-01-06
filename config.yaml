@@ -1,6 +1,6 @@
 name: "Eltako2MQTT"
 description: "Eltako MiniSafe2 to MQTT Bridge"
-version: "1.0.0"
+version: "1.0.2"
 slug: "eltako2mqtt"
 init: false
 arch:
