@@ -14,7 +14,8 @@ RUN \
   && pip3 install --no-cache-dir \
     aiohttp==3.13.3 \
     paho-mqtt==2.1.0 \
-    requests
+    PyYAML==6.0.3 \
+    requests==2.32.3
 
 # Copy data for add-on
 COPY run.sh /
