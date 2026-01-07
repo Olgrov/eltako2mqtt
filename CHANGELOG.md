@@ -4,23 +4,26 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
-## [1.0.3-mqtt2.1.0-dev] - 2026-01-06 (TEST BRANCH)
+## [1.0.3] - 2026-01-07
 
-### Experimental
-- **TEST BRANCH**: paho-mqtt aktualisiert von 1.6.1 auf 2.1.0
-- Refaktoriert für CallbackAPIVersion.VERSION1 (backward-compatible)
-- Alle Callback-Funktionen mit `properties` Parameter erweitert
-- Code-Dokumentation für MQTT 2.1.0 Kompatibilität hinzugefügt
+### Geändert
+- **Abhängigkeiten**: `paho-mqtt` von 1.6.1 auf 2.1.0 aktualisiert
+- **Callback API**: Auf `CallbackAPIVersion.VERSION1` aktualisiert für paho-mqtt 2.1.0 Kompatibilität
+- **on_mqtt_disconnect()**: Callback-Signatur korrigiert zur Unterstützung neuer paho-mqtt 2.1.0 Konventionen
 
-### Breaking Changes
-- Erfordert paho-mqtt 2.1.0 oder höher (nicht abwärtskompatibel zu 1.6.1)
-- Client-Erstellung mit `callback_api_version` Parameter erforderlich
+### Getestet
+- ✅ Vollständig mit 22+ Geräten getestet (Dimmer, Schalter, Jalousien, Wetterstation)
+- ✅ MQTT Discovery funktioniert korrekt
+- ✅ Alle Gerätezustände synchronisieren sich ordnungsgemäß
+- ✅ Keine funktionalen Rückschritte
 
-### Testing
-- ⚠️ WARNUNG: Dies ist ein Testbranch - NUR für Testing verwenden!
-- Gründliches Testing erforderlich bevor in Production
+### Sicherheit
+- `paho-mqtt` 2.1.0 beinhaltet Sicherheitsupdates und Verbesserungen gegenüber 1.6.1
 
----
+### Hinweise
+- Verwendet deprecated `CallbackAPIVersion.VERSION1`
+- Zukünftiges Release wird auf `CallbackAPIVersion.VERSION2` aktualisieren
+- Keine Breaking Changes für Nutzer, die von v1.0.2 upgraden
 
 ## [1.0.2] - 2026-01-06
 
