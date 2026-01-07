@@ -4,6 +4,35 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.0.4] - 2026-01-07
+
+### Geändert
+- **MQTT API**: Upgrade auf `CallbackAPIVersion.VERSION2` für paho-mqtt 2.1.0
+- **Callback-Funktionen**: Alle auf VERSION2 API aktualisiert für moderne Best Practices
+  - `on_mqtt_connect()`: VERSION2 Signatur mit `ConnectFlags` und `ReasonCode`
+  - `on_mqtt_disconnect()`: Vereinfachte Fehlerbehandlung mit `DisconnectFlags`
+- **Logging**: Verbesserte Debug-Meldungen für VERSION2 API
+
+### ✨ Verbesserungen
+- Modernere paho-mqtt 2.1.0 Best Practices
+- Bessere Typsicherheit durch neue Callback-Signaturen
+- Konsistente Error-Handling mit `ReasonCode`
+- Zukunftssicherer Code
+
+### ✅ Getestet
+- Vollständig mit 33+ Eltako Geräten getestet
+- Alle Gerätetypen funktionieren: Jalousien, Schalter, Dimmer, Wetterstation
+- MQTT Discovery funktioniert perfekt
+- Alle Gerätezustände synchronisieren sich ordnungsgemäß
+- Keine funktionalen Rückschritte
+
+### 📝 Notizen
+- Keine Breaking Changes für Nutzer
+- Reine API-Modernisierung, keine neuen Funktionen
+- Drop-in Replacement für v1.0.3
+
+---
+
 ## [1.0.3] - 2026-01-07
 
 ### Geändert
