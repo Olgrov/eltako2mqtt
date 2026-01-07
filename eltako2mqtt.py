@@ -6,6 +6,7 @@ Eltako MiniSafe2 MQTT Bridge
 Dimmerbefehle exakt: dimToX, on, off – keine Doppelbefehle!
 
 Upgraded for paho-mqtt 2.1.0 with CallbackAPIVersion.VERSION1
+Fixed on_mqtt_disconnect() signature for paho-mqtt 2.1.0
 """
 
 import asyncio
@@ -138,17 +139,26 @@ class EltakoMiniSafe2Bridge:
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
-    def on_mqtt_disconnect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int, properties=None):
+    def on_mqtt_disconnect(self, client: mqtt.Client, userdata: Any, disconnect_flags: Any = None, auth_data: Any = None, rc: int = 0):
         """
         Callback for when the client disconnects from the broker.
+        Fixed for paho-mqtt 2.1.0 with proper signature handling.
         
         Args:
             client: MQTT client instance
             userdata: User data (usually None)
-            flags: Response flags sent by the broker
-            rc: Disconnect result code
-            properties: MQTT5 properties (for VERSION2 compatibility, not used in VERSION1)
+            disconnect_flags: Disconnect flags (paho-mqtt 2.1.0)
+            auth_data: Authentication data (paho-mqtt 2.1.0)
+            rc: Disconnect result code (can also be passed as keyword arg)
         """
+        # Handle both old (1.6.1) and new (2.1.0) calling conventions
+        if disconnect_flags is None and auth_data is None:
+            # Old style: on_mqtt_disconnect(client, userdata, rc)
+            rc = disconnect_flags if disconnect_flags is not None else rc
+        else:
+            # New style: on_mqtt_disconnect(client, userdata, disconnect_flags, auth_data, rc)
+            pass
+        
         logger.warning(f"Disconnected from MQTT broker: {rc}")
 
     @staticmethod
@@ -486,7 +496,7 @@ class EltakoMiniSafe2Bridge:
 
 async def main():
     if len(sys.argv) != 2:
-        print("Usage: python3 eltako2mqtt.py ")
+        print("Usage: python3 eltako2mqtt.py <config_file>")
         sys.exit(1)
     config_file = sys.argv[1]
     bridge = EltakoMiniSafe2Bridge(config_file)
