@@ -5,8 +5,8 @@ Eltako MiniSafe2 MQTT Bridge
 
 Dimmerbefehle exakt: dimToX, on, off – keine Doppelbefehle!
 
-Upgraded for paho-mqtt 2.1.0 with CallbackAPIVersion.VERSION1
-Fixed on_mqtt_disconnect() signature for paho-mqtt 2.1.0
+Upgraded for paho-mqtt 2.1.0 with CallbackAPIVersion.VERSION2
+Modern MQTT callback API for improved compatibility
 """
 
 import asyncio
@@ -36,6 +36,7 @@ class EltakoMiniSafe2Bridge:
         self.devices: Dict[str, Any] = {}
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._last_dim_command_time: Dict[str, float] = {}
+        self.discovery_count = 0
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -59,9 +60,9 @@ class EltakoMiniSafe2Bridge:
         self.running = False
 
     async def setup_mqtt(self):
-        # Create MQTT client with CallbackAPIVersion.VERSION1 for backward compatibility
+        # Create MQTT client with CallbackAPIVersion.VERSION2 for modern paho-mqtt
         self.mqtt_client = mqtt.Client(
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=self.mqtt_config.get('client_id', 'eltako2mqtt')
         )
         self.mqtt_client.on_connect = self.on_mqtt_connect
@@ -80,32 +81,34 @@ class EltakoMiniSafe2Bridge:
                 60
             )
             self.mqtt_client.loop_start()
-            logger.info("MQTT client connected (paho-mqtt 2.1.0)")
+            logger.info("MQTT client connected (paho-mqtt 2.1.0 - CallbackAPIVersion.VERSION2)")
         except Exception as e:
             logger.error(f"Failed to connect to MQTT broker: {e}")
             raise
 
-    def on_mqtt_connect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int, properties=None):
+    def on_mqtt_connect(self, client: mqtt.Client, userdata: Any, connect_flags: mqtt.ConnectFlags, reason_code: mqtt.ReasonCode, properties: Any):
         """
         Callback for when the client receives a CONNECT response from the server.
+        VERSION2 API signature.
         
         Args:
             client: MQTT client instance
             userdata: User data (usually None)
-            flags: Response flags sent by the broker
-            rc: Connection result code (0 = success)
-            properties: MQTT5 properties (for VERSION2 compatibility, not used in VERSION1)
+            connect_flags: MQTT connection flags
+            reason_code: Connection reason code (0 = success)
+            properties: MQTT5 properties
         """
-        if rc == 0:
+        if reason_code == 0:
             logger.info("Connected to MQTT broker")
             client.subscribe("eltako/+/set")
             client.subscribe("homeassistant/status")
         else:
-            logger.error(f"Failed to connect to MQTT broker: {rc}")
+            logger.error(f"Failed to connect to MQTT broker: {reason_code}")
 
     def on_mqtt_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
         """
         Callback for when a PUBLISH message is received from the server.
+        VERSION2 API signature (same as VERSION1).
         
         Args:
             client: MQTT client instance
@@ -139,27 +142,22 @@ class EltakoMiniSafe2Bridge:
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
-    def on_mqtt_disconnect(self, client: mqtt.Client, userdata: Any, disconnect_flags: Any = None, auth_data: Any = None, rc: int = 0):
+    def on_mqtt_disconnect(self, client: mqtt.Client, userdata: Any, disconnect_flags: mqtt.DisconnectFlags, reason_code: mqtt.ReasonCode, properties: Any):
         """
         Callback for when the client disconnects from the broker.
-        Fixed for paho-mqtt 2.1.0 with proper signature handling.
+        VERSION2 API signature with cleaner disconnect handling.
         
         Args:
             client: MQTT client instance
             userdata: User data (usually None)
-            disconnect_flags: Disconnect flags (paho-mqtt 2.1.0)
-            auth_data: Authentication data (paho-mqtt 2.1.0)
-            rc: Disconnect result code (can also be passed as keyword arg)
+            disconnect_flags: Disconnect flags
+            reason_code: Disconnect reason code
+            properties: MQTT5 properties
         """
-        # Handle both old (1.6.1) and new (2.1.0) calling conventions
-        if disconnect_flags is None and auth_data is None:
-            # Old style: on_mqtt_disconnect(client, userdata, rc)
-            rc = disconnect_flags if disconnect_flags is not None else rc
+        if reason_code == 0:
+            logger.info("Disconnected from MQTT broker: Normal disconnect")
         else:
-            # New style: on_mqtt_disconnect(client, userdata, disconnect_flags, auth_data, rc)
-            pass
-        
-        logger.warning(f"Disconnected from MQTT broker: {rc}")
+            logger.warning(f"Unexpected disconnect from MQTT broker: {reason_code}")
 
     @staticmethod
     def is_numeric(value: str) -> bool:
@@ -352,7 +350,9 @@ class EltakoMiniSafe2Bridge:
 
     async def publish_discovery(self):
         logger.info("Publishing MQTT discovery")
+        self.discovery_count = 0
         self.loop = asyncio.get_running_loop()
+        
         for sid, device in self.devices.items():
             device_type = device.get("data", "")
             device_info = {
@@ -362,6 +362,7 @@ class EltakoMiniSafe2Bridge:
                 "manufacturer": "Eltako",
                 "via_device": "eltako_minisafe2"
             }
+            
             if "blind" in device_type.lower():
                 config = {
                     "name": f"Eltako Blind {sid}",
@@ -378,6 +379,8 @@ class EltakoMiniSafe2Bridge:
                 }
                 topic = f"homeassistant/cover/eltako_blind_{sid}/config"
                 self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+                self.discovery_count += 1
+                logger.debug(f"Published discovery for blind: {topic}")
             elif "switch" in device_type.lower():
                 config = {
                     "name": f"Eltako Switch {sid}",
@@ -390,6 +393,8 @@ class EltakoMiniSafe2Bridge:
                 }
                 topic = f"homeassistant/switch/eltako_switch_{sid}/config"
                 self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+                self.discovery_count += 1
+                logger.debug(f"Published discovery for switch: {topic}")
             elif "dimmer" in device_type.lower():
                 config = {
                     "name": f"Eltako Dimmer {sid}",
@@ -405,6 +410,8 @@ class EltakoMiniSafe2Bridge:
                 }
                 topic = f"homeassistant/light/eltako_dimmer_{sid}/config"
                 self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+                self.discovery_count += 1
+                logger.debug(f"Published discovery for dimmer: {topic}")
             elif "weather" in device_type.lower():
                 weather_sensors = [
                     ("wind", "Wind", "m/s", None, "sensor"),
@@ -432,6 +439,10 @@ class EltakoMiniSafe2Bridge:
                         config["icon"] = "mdi:weather-windy"
                     topic = f"homeassistant/{platform}/eltako_weather_{key}_{sid}/config"
                     self.mqtt_client.publish(topic, json.dumps(config), retain=True)
+                self.discovery_count += 7  # 7 weather sensors per device
+                logger.debug(f"Published discovery for weather station: {sid}")
+        
+        logger.info(f"Published {self.discovery_count} discovery configurations")
 
     async def poll_devices(self):
         while self.running:
@@ -465,7 +476,7 @@ class EltakoMiniSafe2Bridge:
         return None
 
     async def run(self):
-        logger.info("Starting Eltako2MQTT Bridge (paho-mqtt 2.1.0)")
+        logger.info("Starting Eltako2MQTT Bridge (paho-mqtt 2.1.0 - CallbackAPIVersion.VERSION2)")
         self.loop = asyncio.get_event_loop()
         self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         try:
