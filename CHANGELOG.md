@@ -12,7 +12,7 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 - **on_mqtt_disconnect()**: Callback-Signatur korrigiert zur Unterstützung neuer paho-mqtt 2.1.0 Konventionen
 
 ### Getestet
-- ✅ Vollständig mit 22+ Geräten getestet (Dimmer, Schalter, Jalousien, Wetterstation)
+- ✅ Vollständig mit verschiedenen Geräten getestet (Dimmer, Schalter, Jalousien, Wetterstation)
 - ✅ MQTT Discovery funktioniert korrekt
 - ✅ Alle Gerätezustände synchronisieren sich ordnungsgemäß
 - ✅ Keine funktionalen Rückschritte
