@@ -20,8 +20,7 @@ Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 - Zukunftssicherer Code
 
 ### ✅ Getestet
-- Vollständig mit 33+ Eltako Geräten getestet
-- Alle Gerätetypen funktionieren: Jalousien, Schalter, Dimmer, Wetterstation
+- Vollständig mit verschiedenen Geräten getestet (Dimmer, Schalter, Jalousien, Wetterstation)
 - MQTT Discovery funktioniert perfekt
 - Alle Gerätezustände synchronisieren sich ordnungsgemäß
 - Keine funktionalen Rückschritte
