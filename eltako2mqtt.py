@@ -152,7 +152,7 @@ class EltakoMiniSafe2Bridge:
                         logger.info(f"Ignoring 'on' command for {sid} due to recent dimToX command")
                         return
                 else:
-                    # Prüfe, ob Payload numerisch (dim-Level)
+                    # Prüfe, ob Payload numerisch (dim-Level oder Position)
                     if self.is_numeric(payload):
                         self._last_dim_command_time[sid] = now
 
@@ -236,12 +236,25 @@ class EltakoMiniSafe2Bridge:
                     logger.warning(f"Invalid dimmer numeric command: {command}")
                     return None
             return self._build_url(address, cmd)
-        elif 'blind' in device_type.lower():
+        elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
             c = command.upper()
-            if c in ['OPEN', 'UP']:
-                cmd = 'up'
+            # Check for position commands (numeric 0-100)
+            if self.is_numeric(command):
+                try:
+                    position = int(float(command))
+                    if 0 <= position <= 100:
+                        cmd = f"moveTo{position}"
+                    else:
+                        logger.warning(f"Blind position out of range: {position}")
+                        return None
+                except Exception:
+                    logger.warning(f"Invalid blind position command: {command}")
+                    return None
+            # Check for standard commands
+            elif c in ['OPEN', 'UP']:
+                cmd = 'moveup'
             elif c in ['CLOSE', 'DOWN']:
-                cmd = 'down'
+                cmd = 'movedown'
             elif c == 'STOP':
                 cmd = 'stop'
             else:
@@ -301,11 +314,28 @@ class EltakoMiniSafe2Bridge:
             elif cmd_lower == 'toggle':
                 current = device['state'].get('state', 'off')
                 device['state']['state'] = 'off' if current == 'on' else 'on'
-        elif 'blind' in device_type.lower():
-            if command.upper() in ['OPEN', 'UP']:
-                device['state']['pos'] = 0
-            elif command.upper() in ['CLOSE', 'DOWN']:
-                device['state']['pos'] = 100
+        elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
+            # Handle position commands
+            if is_numeric:
+                try:
+                    position = int(val_numeric)
+                    if 0 <= position <= 100:
+                        device['state']['pos'] = position
+                    else:
+                        logger.warning(f"Blind position out of range for update: {position}")
+                        return
+                except Exception:
+                    logger.warning(f"Invalid blind position for state update: {command}")
+                    return
+            # Handle directional commands
+            elif command.upper() in ['OPEN', 'UP', 'MOVEUP']:
+                # Simulate moving up (decrease position)
+                current_pos = device['state'].get('pos', 50)
+                device['state']['pos'] = max(0, current_pos - 10)
+            elif command.upper() in ['CLOSE', 'DOWN', 'MOVEDOWN']:
+                # Simulate moving down (increase position)
+                current_pos = device['state'].get('pos', 50)
+                device['state']['pos'] = min(100, current_pos + 10)
 
         await self.publish_device_state(sid, device)
 
@@ -333,7 +363,7 @@ class EltakoMiniSafe2Bridge:
         rssi = state.get("rssiPercentage", 0)
         self.mqtt_client.publish(f"{base}/rssi", rssi, retain=True)
 
-        if "blind" in device_type.lower():
+        if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
             pos = state.get("pos", 0)
             self.mqtt_client.publish(f"{base}/state", pos, retain=True)
             sync = state.get("sync", False)
@@ -393,7 +423,7 @@ class EltakoMiniSafe2Bridge:
                 "via_device": "eltako_minisafe2"
             }
             
-            if "blind" in device_type.lower():
+            if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
                 config = {
                     "name": f"Eltako Blind {sid}",
                     "unique_id": f"eltako_blind_{sid}",
@@ -402,9 +432,9 @@ class EltakoMiniSafe2Bridge:
                     "position_topic": f"eltako/{sid}/state",
                     "position_closed": 100,
                     "position_open": 0,
-                    "payload_open": "OPEN",
-                    "payload_close": "CLOSE",
-                    "payload_stop": "STOP",
+                    "payload_open": "open",
+                    "payload_close": "close",
+                    "payload_stop": "stop",
                     "device": device_info
                 }
                 topic = f"homeassistant/cover/eltako_blind_{sid}/config"
