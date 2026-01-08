@@ -4,6 +4,35 @@ Alle wichtigen Änderungen an diesem Projekt werden in dieser Datei dokumentiert
 
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/).
 
+## [1.0.5] - 2026-01-08
+
+### 🔐 Sicherheit
+- **urllib3 Vulnerability Fix**: Entfernt transitive `requests` Abhängigkeit, die urllib3 2.6.2 einführte
+  - Behebt CVE: urllib3 Decompression Bomb (CWE-409) in Streaming API
+  - urllib3 2.6.2 war anfällig für DoS bei HTTP Redirects mit komprimierten Inhalten
+  - Projekt nutzt urllib3 nicht direkt, aber entfernt unnötige Abhängigkeit für maximale Sicherheit
+- **Dependency Cleanup**: Alle Dependencies sind nun essentiell und verwendet
+  - ✅ aiohttp 3.13.3 - HTTP Client für Eltako Device
+  - ✅ paho-mqtt 2.1.0 - MQTT Client für Home Assistant
+  - ✅ PyYAML 6.0.3 - Config Parser
+
+### Geändert
+- **requirements.txt**: `requests` Abhängigkeit entfernt (wurde nicht verwendet)
+- **Dockerfile**: Konsistente Aktualisierung mit requirements.txt
+- **Dependency Audit**: Vollständige Prüfung aller Dependencies durchgeführt
+
+### ✅ Getestet
+- Alle verbleibenden Dependencies nach Verwendung geprüft
+- Kein Funktionsverlust durch Entfernung von `requests`
+- Sicherheitsprofil des Projekts verbessert
+
+### 📝 Notizen
+- **Keine Breaking Changes** für Endbenutzer
+- Reines Security und Maintenance Update
+- Docker-Image wird um ~2-3MB kleiner (weniger Dependencies)
+
+---
+
 ## [1.0.4] - 2026-01-07
 
 ### Geändert
