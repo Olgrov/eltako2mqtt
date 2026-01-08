@@ -21,6 +21,7 @@ import paho.mqtt.client as mqtt
 from urllib.parse import quote_plus
 import time
 
+# Basic logging setup - will be reconfigured after loading config
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -30,6 +31,23 @@ logger = logging.getLogger(__name__)
 class EltakoMiniSafe2Bridge:
     def __init__(self, config_file: str):
         self.config = self.load_config(config_file)
+        
+        # Configure logging from config file
+        logging_config = self.config.get('logging', {})
+        log_level_str = logging_config.get('level', 'INFO').upper()
+        log_level = getattr(logging, log_level_str, logging.INFO)
+        
+        # Reconfigure root logger with level from config
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            force=True  # Force reconfiguration
+        )
+        # Update the module-level logger
+        global logger
+        logger = logging.getLogger(__name__)
+        logger.setLevel(log_level)
+        
         self.mqtt_client: Optional[mqtt.Client] = None
         self.session: Optional[aiohttp.ClientSession] = None
         self.running = False
@@ -46,6 +64,8 @@ class EltakoMiniSafe2Bridge:
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
         self.poll_interval = self.eltako_config.get('poll_interval', 15)
+        
+        logger.info(f"Logging level set to: {log_level_str}")
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         try:
