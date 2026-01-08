@@ -294,6 +294,19 @@ class EltakoMiniSafe2Bridge:
         await self.publish_device_state(sid, device)
 
     def eltako_level_to_mqtt_brightness(self, level: int) -> int:
+        """Convert 0-100 to 0-255 brightness"""
+        # Validiere Input
+        if level is None or (isinstance(level, str) and not level.isdigit()):
+            logger.warning(f"Invalid brightness level: {level}, using 0")
+            level = 0
+        
+        # Konvertiere sicher
+        try:
+            level = int(float(level))
+        except (ValueError, TypeError):
+            level = 0
+        
+        # Clamp und konvertiere
         level = max(0, min(level, 100))
         return round(level * 255 / 100)
 
