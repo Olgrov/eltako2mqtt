@@ -311,7 +311,6 @@ class EltakoMiniSafe2Bridge:
         return round(level * 255 / 100)
 
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
-        logger.debug(f"Publishing device state of sid [{sid}] and device [{device}]")
         device_type = device.get("data", "")
         state = device.get("state", {})
         base = f"eltako/{sid}"
@@ -368,7 +367,7 @@ class EltakoMiniSafe2Bridge:
         self.loop = asyncio.get_running_loop()
         
         for sid, device in self.devices.items():
-            logger.info(f"Publishing device with sid [{sid}] and device [{device}]")
+            logger.debug(f"Publishing device with sid [{sid}] and device [{device}]")
             device_type = device.get("data", "")
             device_info = {
                 "identifiers": [f"eltako_{sid}"],
