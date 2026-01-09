@@ -52,6 +52,7 @@ class EltakoMiniSafe2Bridge:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._last_dim_command_time: Dict[str, float] = {}
         self.discovery_count = 0
+        self.mqtt_connected = False  # Track MQTT connection state
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -116,10 +117,12 @@ class EltakoMiniSafe2Bridge:
         """
         if reason_code == 0:
             logger.info("Connected to MQTT broker")
+            self.mqtt_connected = True  # Set connection flag
             client.subscribe("eltako/+/set")
             client.subscribe("homeassistant/status")
         else:
             logger.error(f"Failed to connect to MQTT broker: {reason_code}")
+            self.mqtt_connected = False
 
     def on_mqtt_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
         """
@@ -174,6 +177,7 @@ class EltakoMiniSafe2Bridge:
             logger.info("Disconnected from MQTT broker: Normal disconnect")
         else:
             logger.warning(f"Unexpected disconnect from MQTT broker: {reason_code}")
+        self.mqtt_connected = False  # Clear connection flag
 
     @staticmethod
     def is_numeric(value: str) -> bool:
@@ -342,7 +346,10 @@ class EltakoMiniSafe2Bridge:
         return round(level * 255 / 100)
 
     def _log_device_feedback(self, sid: str, device: Dict[str, Any]):
-        """Log device state feedback for debugging"""
+        """Log device state feedback for debugging (only if MQTT is connected)"""
+        if not self.mqtt_connected:
+            return
+        
         device_type = device.get("data", "")
         state = device.get("state", {})
         
@@ -522,7 +529,7 @@ class EltakoMiniSafe2Bridge:
                         if sid:
                             self.devices[sid] = device
                             await self.publish_device_state(sid, device)
-                            # Log hardware feedback in debug mode
+                            # Log hardware feedback in debug mode (only if MQTT connected)
                             self._log_device_feedback(sid, device)
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
