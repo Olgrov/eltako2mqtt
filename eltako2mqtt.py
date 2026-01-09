@@ -430,6 +430,8 @@ class EltakoMiniSafe2Bridge:
                     "device_class": "blind",
                     "command_topic": f"eltako/{sid}/set",
                     "position_topic": f"eltako/{sid}/state",
+                    "set_position_topic": f"eltako/{sid}/set",
+                    "set_position_template": "{{ position }}",
                     "position_closed": 100,
                     "position_open": 0,
                     "payload_open": "open",
