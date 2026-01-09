@@ -54,7 +54,6 @@ class EltakoMiniSafe2Bridge:
         self.discovery_count = 0
         self.mqtt_connected = False  # Track MQTT connection state
         self._recently_commanded_device: Optional[str] = None  # Track last commanded device
-        self._command_timeout = 20  # Log feedback for this many seconds after command
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -64,6 +63,9 @@ class EltakoMiniSafe2Bridge:
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
         self.poll_interval = self.eltako_config.get('poll_interval', 15)
+        # Command timeout: poll_interval + 60 seconds
+        self._command_timeout = self.poll_interval + 60
+        logger.info(f"Command timeout set to {self._command_timeout} seconds (poll_interval {self.poll_interval} + 60)")
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         try:
