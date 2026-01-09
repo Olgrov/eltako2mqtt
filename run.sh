@@ -45,18 +45,21 @@ mqtt:
   host: "${MQTT_HOST}"
   port: ${MQTT_PORT}
   client_id: "${MQTT_CLIENT_ID}"
+
+logging:
+  level: "${LOG_LEVEL}"
 EOF
 
 # Add MQTT credentials if provided
 if ! bashio::var.is_empty "${MQTT_USERNAME}"; then
-    echo "  username: \"${MQTT_USERNAME}\"" >> /tmp/eltako2mqtt.yaml
+    sed -i "/^mqtt:/a\  username: \"${MQTT_USERNAME}\"" /tmp/eltako2mqtt.yaml
 fi
 
 if ! bashio::var.is_empty "${MQTT_PASSWORD}"; then
-    echo "  password: \"${MQTT_PASSWORD}\"" >> /tmp/eltako2mqtt.yaml
+    sed -i "/username:/a\  password: \"${MQTT_PASSWORD}\"" /tmp/eltako2mqtt.yaml
 fi
 
-# Set log level
+# Set Python environment
 export PYTHONPATH="/usr/lib/python3.11/site-packages"
 if [[ "${LOG_LEVEL}" == "DEBUG" ]]; then
     export PYTHONUNBUFFERED=1
@@ -64,6 +67,7 @@ fi
 
 bashio::log.info "Eltako Host: ${ELTAKO_HOST}"
 bashio::log.info "MQTT Host: ${MQTT_HOST}:${MQTT_PORT}"
+bashio::log.info "Logging Level: ${LOG_LEVEL}"
 bashio::log.info "Starting Python bridge..."
 
 # Start the Python script
