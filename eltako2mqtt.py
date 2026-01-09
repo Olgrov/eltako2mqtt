@@ -53,6 +53,8 @@ class EltakoMiniSafe2Bridge:
         self._last_dim_command_time: Dict[str, float] = {}
         self.discovery_count = 0
         self.mqtt_connected = False  # Track MQTT connection state
+        self._recently_commanded_device: Optional[str] = None  # Track last commanded device
+        self._command_timeout = 20  # Log feedback for this many seconds after command
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -158,6 +160,8 @@ class EltakoMiniSafe2Bridge:
                     # Prüfe, ob Payload numerisch (dim-Level oder Position)
                     if self.is_numeric(payload):
                         self._last_dim_command_time[sid] = now
+                        # Track this device as recently commanded
+                        self._recently_commanded_device = sid
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
@@ -345,9 +349,27 @@ class EltakoMiniSafe2Bridge:
         level = max(0, min(level, 100))
         return round(level * 255 / 100)
 
+    def _is_recently_commanded(self, sid: str) -> bool:
+        """Check if device was recently commanded"""
+        if not self._recently_commanded_device or self._recently_commanded_device != sid:
+            return False
+        
+        # Check if command was within timeout window
+        last_time = self._last_dim_command_time.get(sid, 0)
+        if last_time and (time.monotonic() - last_time) < self._command_timeout:
+            return True
+        
+        # Clear if timeout exceeded
+        self._recently_commanded_device = None
+        return False
+
     def _log_device_feedback(self, sid: str, device: Dict[str, Any]):
-        """Log device state feedback for debugging (only if MQTT is connected)"""
+        """Log device state feedback for debugging (only if MQTT is connected and device was recently commanded)"""
         if not self.mqtt_connected:
+            return
+        
+        # Only log if device was recently commanded
+        if not self._is_recently_commanded(sid):
             return
         
         device_type = device.get("data", "")
@@ -529,7 +551,7 @@ class EltakoMiniSafe2Bridge:
                         if sid:
                             self.devices[sid] = device
                             await self.publish_device_state(sid, device)
-                            # Log hardware feedback in debug mode (only if MQTT connected)
+                            # Log hardware feedback in debug mode (only if MQTT connected and recently commanded)
                             self._log_device_feedback(sid, device)
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
