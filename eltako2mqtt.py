@@ -62,7 +62,7 @@ class EltakoMiniSafe2Bridge:
         self.mqtt_config = self.config['mqtt']
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
-        self.poll_interval = self.eltako_config.get('poll_interval', 15)
+        self.poll_interval = self.eltako_config.get('poll_interval', 5)
         # Command timeout: poll_interval + 60 seconds
         self._command_timeout = self.poll_interval + 60
         logger.info(f"Command timeout set to {self._command_timeout} seconds (poll_interval {self.poll_interval} + 60)")
