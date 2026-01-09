@@ -20,7 +20,7 @@ options:
   eltako:
     host: "192.168.1.100"
     password: ""
-    poll_interval: 15
+    poll_interval: 5
   mqtt:
     host: "core-mosquitto"
     port: 1883
