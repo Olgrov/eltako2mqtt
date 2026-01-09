@@ -200,7 +200,7 @@ class EltakoMiniSafe2Bridge:
                 text = await response.text()
                 if response.status == 200 and "{XC_SUC}" in text:
                     logger.info(f"Command successful for {sid}: {command}")
-                    await self.update_device_state_immediate(sid, command)
+                    await self.update_device_state_immediate(sid, command, device)
                 else:
                     logger.error(f"Command failed for {sid} ({command}): {text}")
         except Exception as e:
@@ -243,8 +243,10 @@ class EltakoMiniSafe2Bridge:
                 try:
                     position = int(float(command))
                     if 0 <= position <= 100:
-                        # Invert position for Eltako device compatibility
-                        inverted_position = 100 - position
+                        # Clamp to 1-99 range for Eltako device (0 and 100 may be interpreted as edge cases)
+                        # Then invert for Eltako device compatibility
+                        clamped_position = max(1, min(99, position))
+                        inverted_position = 100 - clamped_position
                         cmd = f"moveTo{inverted_position}"
                     else:
                         logger.warning(f"Blind position out of range: {position}")
@@ -278,11 +280,10 @@ class EltakoMiniSafe2Bridge:
     def _build_url(self, address: str, cmd_data: str) -> str:
         return f"{self.base_url}?XC_FNC=SendSC&type=ENOCEAN&address={address}&data={cmd_data}&XC_PASS={quote_plus(self.password)}"
 
-    async def update_device_state_immediate(self, sid: str, command: str):
+    async def update_device_state_immediate(self, sid: str, command: str, device: Dict[str, Any]):
         if sid not in self.devices:
             return
 
-        device = self.devices[sid]
         device_type = device.get('data', '')
         cmd_lower = command.strip().lower()
         val_numeric = None
@@ -310,36 +311,20 @@ class EltakoMiniSafe2Bridge:
                     return
                 device['state']['level'] = level
                 device['state']['state'] = 'on' if level > 0 else 'off'
+            await self.publish_device_state(sid, device)
         elif 'switch' in device_type.lower():
             if cmd_lower in ['on', 'off']:
                 device['state']['state'] = cmd_lower
             elif cmd_lower == 'toggle':
                 current = device['state'].get('state', 'off')
                 device['state']['state'] = 'off' if current == 'on' else 'on'
+            await self.publish_device_state(sid, device)
         elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
-            # Handle position commands
-            if is_numeric:
-                try:
-                    position = int(val_numeric)
-                    if 0 <= position <= 100:
-                        device['state']['pos'] = position
-                    else:
-                        logger.warning(f"Blind position out of range for update: {position}")
-                        return
-                except Exception:
-                    logger.warning(f"Invalid blind position for state update: {command}")
-                    return
-            # Handle directional commands
-            elif command.upper() in ['OPEN', 'UP', 'MOVEUP']:
-                # Simulate moving up (decrease position)
-                current_pos = device['state'].get('pos', 50)
-                device['state']['pos'] = max(0, current_pos - 10)
-            elif command.upper() in ['CLOSE', 'DOWN', 'MOVEDOWN']:
-                # Simulate moving down (increase position)
-                current_pos = device['state'].get('pos', 50)
-                device['state']['pos'] = min(100, current_pos + 10)
-
-        await self.publish_device_state(sid, device)
+            # For blinds: DO NOT update state immediately!
+            # Wait for the actual hardware state to be polled and reported.
+            # This prevents the UI from jumping to the inverted position.
+            logger.debug(f"Blind command sent for {sid}, waiting for hardware feedback...")
+            return
 
     def eltako_level_to_mqtt_brightness(self, level: int) -> int:
         """Convert 0-100 to 0-255 brightness"""
