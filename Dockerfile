@@ -29,6 +29,6 @@ LABEL \
   io.hass.description="Eltako MiniSafe2 to MQTT Bridge" \
   io.hass.arch="armhf|aarch64|i386|amd64|armv7" \
   io.hass.type="addon" \
-  io.hass.version="1.0.5"
+  io.hass.version="1.1.0"
 
 CMD [ "/run.sh" ]
