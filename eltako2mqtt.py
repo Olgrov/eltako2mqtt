@@ -243,7 +243,9 @@ class EltakoMiniSafe2Bridge:
                 try:
                     position = int(float(command))
                     if 0 <= position <= 100:
-                        cmd = f"moveTo{position}"
+                        # Invert position for Eltako device compatibility
+                        inverted_position = 100 - position
+                        cmd = f"moveTo{inverted_position}"
                     else:
                         logger.warning(f"Blind position out of range: {position}")
                         return None
