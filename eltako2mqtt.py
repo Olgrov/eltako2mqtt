@@ -341,6 +341,27 @@ class EltakoMiniSafe2Bridge:
         level = max(0, min(level, 100))
         return round(level * 255 / 100)
 
+    def _log_device_feedback(self, sid: str, device: Dict[str, Any]):
+        """Log device state feedback for debugging"""
+        device_type = device.get("data", "")
+        state = device.get("state", {})
+        
+        if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
+            pos = state.get("pos", 0)
+            logger.debug(f"Hardware feedback for blind {sid}: position={pos}%")
+        elif "switch" in device_type.lower():
+            st = state.get("state", "off")
+            logger.debug(f"Hardware feedback for switch {sid}: state={st}")
+        elif "dimmer" in device_type.lower():
+            st = state.get("state", "off")
+            level = state.get("level", 0)
+            logger.debug(f"Hardware feedback for dimmer {sid}: state={st}, level={level}%")
+        elif "weather" in device_type.lower():
+            temp = state.get("temperature", 0)
+            rain = state.get("rain_state", False)
+            wind = state.get("wind", 0)
+            logger.debug(f"Hardware feedback for weather {sid}: temp={temp}°C, rain={rain}, wind={wind}m/s")
+
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
         device_type = device.get("data", "")
         state = device.get("state", {})
@@ -501,6 +522,8 @@ class EltakoMiniSafe2Bridge:
                         if sid:
                             self.devices[sid] = device
                             await self.publish_device_state(sid, device)
+                            # Log hardware feedback in debug mode
+                            self._log_device_feedback(sid, device)
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Polling error: {e}")
