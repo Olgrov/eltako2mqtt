@@ -21,15 +21,30 @@ import paho.mqtt.client as mqtt
 from urllib.parse import quote_plus
 import time
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# Placeholder logger - will be configured after loading config
 logger = logging.getLogger(__name__)
 
 class EltakoMiniSafe2Bridge:
     def __init__(self, config_file: str):
+        # Load config FIRST
         self.config = self.load_config(config_file)
+        
+        # Get logging level from config (or default to INFO)
+        logging_config = self.config.get('logging', {})
+        log_level_str = logging_config.get('level', 'INFO').upper()
+        log_level = getattr(logging, log_level_str, logging.INFO)
+        
+        # Configure logging ONCE with the correct level from config
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        
+        # Update module-level logger
+        global logger
+        logger = logging.getLogger(__name__)
+        logger.info(f"Logging level set to: {log_level_str}")
+        
         self.mqtt_client: Optional[mqtt.Client] = None
         self.session: Optional[aiohttp.ClientSession] = None
         self.running = False
@@ -37,6 +52,8 @@ class EltakoMiniSafe2Bridge:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._last_dim_command_time: Dict[str, float] = {}
         self.discovery_count = 0
+        self.mqtt_connected = False  # Track MQTT connection state
+        self._recently_commanded_device: Optional[str] = None  # Track last commanded device
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -45,14 +62,18 @@ class EltakoMiniSafe2Bridge:
         self.mqtt_config = self.config['mqtt']
         self.base_url = f"http://{self.eltako_config['host']}/command"
         self.password = self.eltako_config['password']
-        self.poll_interval = self.eltako_config.get('poll_interval', 15)
+        self.poll_interval = self.eltako_config.get('poll_interval', 5)
+        # Command timeout: poll_interval + 60 seconds
+        self._command_timeout = self.poll_interval + 60
+        logger.info(f"Command timeout set to {self._command_timeout} seconds (poll_interval {self.poll_interval} + 60)")
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         try:
             with open(config_file, 'r') as f:
                 return yaml.safe_load(f)
         except Exception as e:
-            logger.error(f"Failed to load config: {e}")
+            # Use temporary logger before logging is configured
+            print(f"Error: Failed to load config: {e}")
             sys.exit(1)
 
     def signal_handler(self, signum, frame):
@@ -100,10 +121,12 @@ class EltakoMiniSafe2Bridge:
         """
         if reason_code == 0:
             logger.info("Connected to MQTT broker")
+            self.mqtt_connected = True  # Set connection flag
             client.subscribe("eltako/+/set")
             client.subscribe("homeassistant/status")
         else:
             logger.error(f"Failed to connect to MQTT broker: {reason_code}")
+            self.mqtt_connected = False
 
     def on_mqtt_message(self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage):
         """
@@ -136,9 +159,11 @@ class EltakoMiniSafe2Bridge:
                         logger.info(f"Ignoring 'on' command for {sid} due to recent dimToX command")
                         return
                 else:
-                    # Prüfe, ob Payload numerisch (dim-Level)
+                    # Prüfe, ob Payload numerisch (dim-Level oder Position)
                     if self.is_numeric(payload):
                         self._last_dim_command_time[sid] = now
+                        # Track this device as recently commanded
+                        self._recently_commanded_device = sid
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
@@ -158,6 +183,7 @@ class EltakoMiniSafe2Bridge:
             logger.info("Disconnected from MQTT broker: Normal disconnect")
         else:
             logger.warning(f"Unexpected disconnect from MQTT broker: {reason_code}")
+        self.mqtt_connected = False  # Clear connection flag
 
     @staticmethod
     def is_numeric(value: str) -> bool:
@@ -184,7 +210,7 @@ class EltakoMiniSafe2Bridge:
                 text = await response.text()
                 if response.status == 200 and "{XC_SUC}" in text:
                     logger.info(f"Command successful for {sid}: {command}")
-                    await self.update_device_state_immediate(sid, command)
+                    await self.update_device_state_immediate(sid, command, device)
                 else:
                     logger.error(f"Command failed for {sid} ({command}): {text}")
         except Exception as e:
@@ -220,12 +246,27 @@ class EltakoMiniSafe2Bridge:
                     logger.warning(f"Invalid dimmer numeric command: {command}")
                     return None
             return self._build_url(address, cmd)
-        elif 'blind' in device_type.lower():
+        elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
             c = command.upper()
-            if c in ['OPEN', 'UP']:
-                cmd = 'up'
+            # Check for position commands (numeric 0-100)
+            if self.is_numeric(command):
+                try:
+                    position = int(float(command))
+                    if 0 <= position <= 100:
+                        # Always invert position for Eltako device compatibility
+                        inverted_position = 100 - position
+                        cmd = f"moveTo{inverted_position}"
+                    else:
+                        logger.warning(f"Blind position out of range: {position}")
+                        return None
+                except Exception:
+                    logger.warning(f"Invalid blind position command: {command}")
+                    return None
+            # Check for standard commands
+            elif c in ['OPEN', 'UP']:
+                cmd = 'moveup'
             elif c in ['CLOSE', 'DOWN']:
-                cmd = 'down'
+                cmd = 'movedown'
             elif c == 'STOP':
                 cmd = 'stop'
             else:
@@ -247,11 +288,10 @@ class EltakoMiniSafe2Bridge:
     def _build_url(self, address: str, cmd_data: str) -> str:
         return f"{self.base_url}?XC_FNC=SendSC&type=ENOCEAN&address={address}&data={cmd_data}&XC_PASS={quote_plus(self.password)}"
 
-    async def update_device_state_immediate(self, sid: str, command: str):
+    async def update_device_state_immediate(self, sid: str, command: str, device: Dict[str, Any]):
         if sid not in self.devices:
             return
 
-        device = self.devices[sid]
         device_type = device.get('data', '')
         cmd_lower = command.strip().lower()
         val_numeric = None
@@ -279,23 +319,79 @@ class EltakoMiniSafe2Bridge:
                     return
                 device['state']['level'] = level
                 device['state']['state'] = 'on' if level > 0 else 'off'
+            await self.publish_device_state(sid, device)
         elif 'switch' in device_type.lower():
             if cmd_lower in ['on', 'off']:
                 device['state']['state'] = cmd_lower
             elif cmd_lower == 'toggle':
                 current = device['state'].get('state', 'off')
                 device['state']['state'] = 'off' if current == 'on' else 'on'
-        elif 'blind' in device_type.lower():
-            if command.upper() in ['OPEN', 'UP']:
-                device['state']['pos'] = 0
-            elif command.upper() in ['CLOSE', 'DOWN']:
-                device['state']['pos'] = 100
-
-        await self.publish_device_state(sid, device)
+            await self.publish_device_state(sid, device)
+        elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
+            # For blinds: DO NOT update state immediately!
+            # Wait for the actual hardware state to be polled and reported.
+            # This prevents the UI from jumping to the inverted position.
+            logger.debug(f"Blind command sent for {sid}, waiting for hardware feedback...")
+            return
 
     def eltako_level_to_mqtt_brightness(self, level: int) -> int:
+        """Convert 0-100 to 0-255 brightness"""
+        # Validiere Input
+        if level is None or (isinstance(level, str) and not level.isdigit()):
+            logger.warning(f"Invalid brightness level: {level}, using 0")
+            level = 0
+        
+        # Konvertiere sicher
+        try:
+            level = int(float(level))
+        except (ValueError, TypeError):
+            level = 0
+        
+        # Clamp und konvertiere
         level = max(0, min(level, 100))
         return round(level * 255 / 100)
+
+    def _is_recently_commanded(self, sid: str) -> bool:
+        """Check if device was recently commanded"""
+        if not self._recently_commanded_device or self._recently_commanded_device != sid:
+            return False
+        
+        # Check if command was within timeout window
+        last_time = self._last_dim_command_time.get(sid, 0)
+        if last_time and (time.monotonic() - last_time) < self._command_timeout:
+            return True
+        
+        # Clear if timeout exceeded
+        self._recently_commanded_device = None
+        return False
+
+    def _log_device_feedback(self, sid: str, device: Dict[str, Any]):
+        """Log device state feedback for debugging (only if MQTT is connected and device was recently commanded)"""
+        if not self.mqtt_connected:
+            return
+        
+        # Only log if device was recently commanded
+        if not self._is_recently_commanded(sid):
+            return
+        
+        device_type = device.get("data", "")
+        state = device.get("state", {})
+        
+        if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
+            pos = state.get("pos", 0)
+            logger.debug(f"Hardware feedback for blind {sid}: position={pos}%")
+        elif "switch" in device_type.lower():
+            st = state.get("state", "off")
+            logger.debug(f"Hardware feedback for switch {sid}: state={st}")
+        elif "dimmer" in device_type.lower():
+            st = state.get("state", "off")
+            level = state.get("level", 0)
+            logger.debug(f"Hardware feedback for dimmer {sid}: state={st}, level={level}%")
+        elif "weather" in device_type.lower():
+            temp = state.get("temperature", 0)
+            rain = state.get("rain_state", False)
+            wind = state.get("wind", 0)
+            logger.debug(f"Hardware feedback for weather {sid}: temp={temp}°C, rain={rain}, wind={wind}m/s")
 
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
         device_type = device.get("data", "")
@@ -304,7 +400,7 @@ class EltakoMiniSafe2Bridge:
         rssi = state.get("rssiPercentage", 0)
         self.mqtt_client.publish(f"{base}/rssi", rssi, retain=True)
 
-        if "blind" in device_type.lower():
+        if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
             pos = state.get("pos", 0)
             self.mqtt_client.publish(f"{base}/state", pos, retain=True)
             sync = state.get("sync", False)
@@ -354,6 +450,7 @@ class EltakoMiniSafe2Bridge:
         self.loop = asyncio.get_running_loop()
         
         for sid, device in self.devices.items():
+            logger.debug(f"Publishing device with sid [{sid}] and device [{device}]")
             device_type = device.get("data", "")
             device_info = {
                 "identifiers": [f"eltako_{sid}"],
@@ -363,18 +460,20 @@ class EltakoMiniSafe2Bridge:
                 "via_device": "eltako_minisafe2"
             }
             
-            if "blind" in device_type.lower():
+            if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
                 config = {
                     "name": f"Eltako Blind {sid}",
                     "unique_id": f"eltako_blind_{sid}",
                     "device_class": "blind",
                     "command_topic": f"eltako/{sid}/set",
                     "position_topic": f"eltako/{sid}/state",
+                    "set_position_topic": f"eltako/{sid}/set",
+                    "set_position_template": "{{ position }}",
                     "position_closed": 100,
                     "position_open": 0,
-                    "payload_open": "OPEN",
-                    "payload_close": "CLOSE",
-                    "payload_stop": "STOP",
+                    "payload_open": "open",
+                    "payload_close": "close",
+                    "payload_stop": "stop",
                     "device": device_info
                 }
                 topic = f"homeassistant/cover/eltako_blind_{sid}/config"
@@ -454,6 +553,8 @@ class EltakoMiniSafe2Bridge:
                         if sid:
                             self.devices[sid] = device
                             await self.publish_device_state(sid, device)
+                            # Log hardware feedback in debug mode (only if MQTT connected and recently commanded)
+                            self._log_device_feedback(sid, device)
                 await asyncio.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Polling error: {e}")
