@@ -80,6 +80,24 @@ class EltakoMiniSafe2Bridge:
         logger.info(f"Received signal {signum}, shutting down...")
         self.running = False
 
+    def is_switch_device(self, device_type: str) -> bool:
+        """Check if device is a switch-type actuator
+        
+        Supports all FSR14 variants and other switch actuators:
+        - FSR14 (1-4 channels)
+        - FSR14M-2x (with power measurement)
+        - FSR14SSR (Solid State Relay)
+        - F4SR14-LED (4-channel for LED)
+        - FAE14LPR, FAE14SSR (switch actuators)
+        """
+        device_type_lower = device_type.lower()
+        return any(keyword in device_type_lower for keyword in [
+            'switch',
+            'fsr14',       # All FSR14 variants
+            'f4sr14',      # 4-channel switch
+            'fae14'        # FAE14 switch actuators
+        ])
+
     async def setup_mqtt(self):
         # Create MQTT client with CallbackAPIVersion.VERSION2 for modern paho-mqtt
         self.mqtt_client = mqtt.Client(
@@ -272,7 +290,7 @@ class EltakoMiniSafe2Bridge:
             else:
                 return None
             return self._build_url(address, cmd)
-        elif 'switch' in device_type.lower():
+        elif self.is_switch_device(device_type):
             c = command.lower()
             if c in ['on', 'off']:
                 cmd = c
@@ -320,7 +338,7 @@ class EltakoMiniSafe2Bridge:
                 device['state']['level'] = level
                 device['state']['state'] = 'on' if level > 0 else 'off'
             await self.publish_device_state(sid, device)
-        elif 'switch' in device_type.lower():
+        elif self.is_switch_device(device_type):
             if cmd_lower in ['on', 'off']:
                 device['state']['state'] = cmd_lower
             elif cmd_lower == 'toggle':
@@ -380,7 +398,7 @@ class EltakoMiniSafe2Bridge:
         if "blind" in device_type.lower() or "tf_blind" in device_type.lower():
             pos = state.get("pos", 0)
             logger.debug(f"Hardware feedback for blind {sid}: position={pos}%")
-        elif "switch" in device_type.lower():
+        elif self.is_switch_device(device_type):
             st = state.get("state", "off")
             logger.debug(f"Hardware feedback for switch {sid}: state={st}")
         elif "dimmer" in device_type.lower():
@@ -409,7 +427,7 @@ class EltakoMiniSafe2Bridge:
             rt = state.get("rt", 0)
             self.mqtt_client.publish(f"{base}/rv", rv, retain=True)
             self.mqtt_client.publish(f"{base}/rt", rt, retain=True)
-        elif "switch" in device_type.lower():
+        elif self.is_switch_device(device_type):
             st = state.get("state", "off")
             self.mqtt_client.publish(f"{base}/state", st, retain=True)
         elif "dimmer" in device_type.lower():
@@ -443,6 +461,11 @@ class EltakoMiniSafe2Bridge:
                     except Exception:
                         v = 0
                 self.mqtt_client.publish(f"{base}/{k}", v, retain=True)
+        elif "tf_smoke" in device_type.lower():
+            smoke = state.get("smoke", False)
+            temp = state.get("temperature", 0)
+            self.mqtt_client.publish(f"{base}/smoke", str(smoke).lower(), retain=True)
+            self.mqtt_client.publish(f"{base}/temperature", temp, retain=True)
 
     async def publish_discovery(self):
         logger.info("Publishing MQTT discovery")
@@ -480,7 +503,7 @@ class EltakoMiniSafe2Bridge:
                 self.mqtt_client.publish(topic, json.dumps(config), retain=True)
                 self.discovery_count += 1
                 logger.debug(f"Published discovery for blind: {topic}")
-            elif "switch" in device_type.lower():
+            elif self.is_switch_device(device_type):
                 config = {
                     "name": f"Eltako Switch {sid}",
                     "unique_id": f"eltako_switch_{sid}",
@@ -540,6 +563,34 @@ class EltakoMiniSafe2Bridge:
                     self.mqtt_client.publish(topic, json.dumps(config), retain=True)
                 self.discovery_count += 7  # 7 weather sensors per device
                 logger.debug(f"Published discovery for weather station: {sid}")
+            elif "tf_smoke" in device_type.lower():
+                # Binary Sensor for smoke detection
+                smoke_config = {
+                    "name": f"Smoke Detector {sid}",
+                    "unique_id": f"eltako_smoke_{sid}",
+                    "state_topic": f"eltako/{sid}/smoke",
+                    "device_class": "smoke",
+                    "payload_on": "true",
+                    "payload_off": "false",
+                    "device": device_info
+                }
+                smoke_topic = f"homeassistant/binary_sensor/eltako_smoke_{sid}/config"
+                self.mqtt_client.publish(smoke_topic, json.dumps(smoke_config), retain=True)
+                
+                # Temperature Sensor
+                temp_config = {
+                    "name": f"Temperature {sid}",
+                    "unique_id": f"eltako_smoke_temp_{sid}",
+                    "state_topic": f"eltako/{sid}/temperature",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                    "device": device_info
+                }
+                temp_topic = f"homeassistant/sensor/eltako_smoke_temp_{sid}/config"
+                self.mqtt_client.publish(temp_topic, json.dumps(temp_config), retain=True)
+                
+                self.discovery_count += 2  # smoke + temperature sensor
+                logger.debug(f"Published discovery for smoke detector: {sid}")
         
         logger.info(f"Published {self.discovery_count} discovery configurations")
 
