@@ -15,23 +15,40 @@ Dieses Add-on stellt eine Brücke zwischen dem Eltako MiniSafe2 System und MQTT 
 **Unterstützte Gerätetypen:**
 - Jalousien/Rollläden (`eltako_blind`, `eltako_tf_blind`) - mit **Positionssteuerung** (0-100%)
 - Schalter (`eltako_switch`, `eltako_tf_switch`) - on/off/toggle
+- **FSR14 Schaltaktoren** - FSR14, FSR14M-2x, FSR14SSR, F4SR14-LED, FAE14 ✨ **NEU in v1.2.0**
 - Dimmer (`eltako_dimmer`, `eltako_tf_dimmer`) - mit **robustem Helligkeitshandling**
 - Wetterstationen (`eltako_weather`) - Temperatur, Wind, Regen, Helligkeit
+- **Rauchmelder (FRWB)** - Rauchalarm + Temperatur ✨ **NEU in v1.2.0**
 
-## 🆕 Was ist neu in v1.1.0?
+## 🆕 Was ist neu in v1.2.0?
 
-### ✨ Neue Features
+### ✨ Neue Geräte
+- **FSR14 Schaltaktoren Familie** - Vollständige Unterstützung
+  - FSR14 (1-4 Kanäle)
+  - FSR14M-2x (mit Strommessung)*
+  - FSR14SSR (Solid State Relais)
+  - F4SR14-LED (4-fach für LED-Steuerung)
+  - FAE14LPR, FAE14SSR
+- **FRWB Rauchmelder** - Komplette Integration
+  - Binary Sensor für Rauchalarm
+  - Temperatursensor
+  - RSSI Signalstärke
+
+*Strommessung kann in zukünftigen Versionen als zusätzlicher Sensor hinzugefügt werden
+
+### 🚀 Verbesserungen
+- Sauberer, wartbarer Code durch neue `is_switch_device()` Helper-Funktion
+- Mehrkanalige Geräte (FSR14-4x) automatisch unterstützt
+- Jeder Kanal erscheint als eigene Switch-Entity in Home Assistant
+- Nutzt bewährte Patterns von bestehenden Gerätetypen
+
+### Was ist neu in v1.1.0?
+
 - **Position-basierte Jalousiensteuerung** - Kontrolle mit 0-100% Position
 - **Defensives Helligkeitshandling** - Robuste Validierung für Dimmer
 - **Intelligentes Logging** - Nur gesteuerte Geräte bei MQTT-Verbindung geloggt
 - **Optimiertes Polling** - Standard 5 Sekunden statt 15 (schnellere Updates)
 - **Konfigurierbare Log-Level** - DEBUG, INFO, WARNING, ERROR
-
-### 🚀 Verbesserungen
-- Schnellere Reaktion auf Befehle durch optimiertes Polling
-- Saubere Logs ohne Noise durch intelligentes Filtering
-- Besseres Error Handling für ungültige Eingaben
-- Jalousien in Home Assistant zeigen korrekte Position
 
 ## Installation
 
@@ -105,16 +122,28 @@ Nach der Installation und Konfiguration:
 - **RSSI**: `eltako/{SID}/rssi` - Signalstärke
 - **Helligkeit (Dimmer)**: `eltako/{SID}/brightness` - 0-255
 - **Jalousienposition**: `eltako/{SID}/pos` - 0-100%
+- **Rauchmelder**: `eltako/{SID}/smoke` - binary sensor (on/off)
+- **Temperatur (Rauchmelder)**: `eltako/{SID}/temperature` - °C
 
 ### Beispiel-Befehle
 
-**Jalousien (neu in v1.1.0):**
+**FSR14 Schalter (neu in v1.2.0):**
+```bash
+# Einschalten
+mosquitto_pub -t "eltako/20/set" -m "on"
+# Ausschalten
+mosquitto_pub -t "eltako/20/set" -m "off"
+# Umschalten
+mosquitto_pub -t "eltako/20/set" -m "toggle"
+```
+
+**Jalousien:**
 ```bash
 # Öffnen (Position 0)
 mosquitto_pub -t "eltako/01/set" -m "open"
 # Schließen (Position 100)
 mosquitto_pub -t "eltako/01/set" -m "close"
-# Zu Position 50% fahren (neue Feature!)
+# Zu Position 50% fahren
 mosquitto_pub -t "eltako/01/set" -m "50"
 # Stoppen
 mosquitto_pub -t "eltako/01/set" -m "stop"
@@ -130,7 +159,7 @@ mosquitto_pub -t "eltako/11/set" -m "off"
 mosquitto_pub -t "eltako/11/set" -m "toggle"
 ```
 
-**Dimmer (v1.1.0 mit robustem Handling):**
+**Dimmer:**
 ```bash
 # Einschalten
 mosquitto_pub -t "eltako/13/set" -m "on"
@@ -148,8 +177,10 @@ Alle Geräte werden automatisch über MQTT Discovery erkannt:
 
 - **Jalousien** → Home Assistant `cover` Entity mit Position
 - **Schalter** → Home Assistant `switch` Entity
+- **FSR14 Aktoren** → Home Assistant `switch` Entity (je Kanal)
 - **Dimmer** → Home Assistant `light` Entity mit Helligkeit
 - **Wetterstation** → Mehrere `sensor` Entities (Temp, Wind, Regen, Helligkeit)
+- **Rauchmelder** → `binary_sensor` (Rauch) + `sensor` (Temperatur, RSSI)
 
 Keine manuelle Konfiguration in Home Assistant erforderlich!
 
@@ -168,9 +199,15 @@ Keine manuelle Konfiguration in Home Assistant erforderlich!
    - Suchen Sie nach "Published discovery"
 4. Falls Fehler angezeigt: Überprüfen Sie MQTT Broker Verbindung
 
+### FSR14 oder Rauchmelder werden nicht erkannt
+- Prüfen Sie im MiniSafe2 Web-Interface, ob die Geräte dort sichtbar sind
+- Achten Sie auf die korrekte Gerätebezeichnung (z.B. "FSR14", "FRWB")
+- Setzen Sie Log-Level auf DEBUG und suchen Sie nach Geräteerkennung
+- Bei Mehrkanalgeräten: Jeder Kanal hat eine eigene SID und erscheint separat
+
 ### Zu viel Log-Output
 - Setzen Sie `logging.level` auf "INFO" oder "WARNING"
-- Bei v1.1.0: Logging ist intelligent gefiltert (nur gesteuerte Geräte bei MQTT-Verbindung)
+- Bei v1.1.0+: Logging ist intelligent gefiltert (nur gesteuerte Geräte bei MQTT-Verbindung)
 
 ### Home Assistant erkennt Geräte nicht
 - Stellen Sie sicher, dass MQTT Integration in Home Assistant aktiv ist
@@ -192,21 +229,32 @@ Issues melden: https://github.com/Olgrov/eltako2mqtt/issues
 Die Sensorwerte `illumination_east`, `illumination_south` und `illumination_west` werden intern mit 1000 multipliziert, damit sie als Lux (lx) korrekt in Home Assistant angezeigt werden.
 Alle vier Helligkeitssensoren (`illumination`, `illumination_east`, `illumination_south`, `illumination_west`) werden zudem als ganze Zahlen ohne Nachkommastellen übertragen.
 
-### Jalousiensteuerung (v1.1.0)
+### Jalousiensteuerung
 - Positionen werden automatisch invertiert für Eltako-Kompatibilität
 - Position 0 = offen, Position 100 = geschlossen
 - Die UI in Home Assistant zeigt korrekte Positionen
 
-### Dimmer-Helligkeitssteuerung (v1.1.0)
+### Dimmer-Helligkeitssteuerung
 - Robuste Validierung verhindert Crashes durch ungültige Werte
 - Unterstützt 0-100% Skala UND 0-255 Brightness Skala
 - Automatische Konvertierung in Home Assistant
+
+### Mehrkanalige FSR14 Geräte
+- MiniSafe2 meldet jeden Kanal als separates Gerät mit aufeinanderfolgenden SIDs
+- Beispiel: FSR14-4x mit SID 20 → Kanäle erscheinen als SID 20, 21, 22, 23
+- Jeder Kanal wird als eigene Switch-Entity in Home Assistant erkannt
+- Keine spezielle Konfiguration erforderlich
+
+### Rauchmelder (FRWB)
+- Binary Sensor zeigt Rauchalarm-Status (on = Alarm, off = Normal)
+- Temperatursensor zeigt aktuelle Raumtemperatur
+- RSSI zeigt Signalstärke zur Überwachung der Funkverbindung
 
 ## Changelog & Releases
 
 Alle Versionshinweise und neuen Features finden Sie in:
 - [CHANGELOG.md](CHANGELOG.md) - Detaillierter technischer Changelog
-- [RELEASE_NOTES.md](RELEASE_NOTES.md) - Umfassende Release-Dokumentation
+- [Releases](https://github.com/Olgrov/eltako2mqtt/releases) - Release Notes mit Upgrade-Hinweisen
 
 ## Dependencies
 
