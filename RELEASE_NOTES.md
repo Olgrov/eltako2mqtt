@@ -4,6 +4,27 @@ Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Elta
 
 ---
 
+## Version 1.2.1 - Dependency & Security Update (2026-04-02)
+
+### 🎯 Überblick
+
+Version 1.2.1 ist ein kleines Wartungs- und Sicherheitsrelease ohne funktionale Änderungen an den unterstützten Geräten.
+Es synchronisiert die verwendete `aiohttp`-Version im Docker-Image mit `requirements.txt` und aktualisiert die interne Add-on-Versionsführung.
+
+### 🔐 Änderungen
+
+- Aktualisiert `aiohttp` von `3.13.3` auf `3.13.5` im Docker-Image.
+- Stellt sicher, dass `requirements.txt` und Dockerfile dieselbe `aiohttp`-Version verwenden.
+- Hebt die Add-on-Version auf **1.2.1** in `config.yaml` und im Docker-Label an.
+
+### ✅ Auswirkungen
+
+- Keine neuen Features, kein Breaking Change.
+- Bestehende Konfigurationen funktionieren unverändert.
+- Empfohlenes Update, um auf den aktuellsten Patch-Stand der HTTP-Bibliothek zu kommen.
+
+---
+
 ## Version 1.2.0 - FSR14 Switch Actuators & FRWB Smoke Detectors (2026-02-05)
 
 ### 🎯 Überblick

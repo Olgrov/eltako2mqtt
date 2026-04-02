@@ -259,7 +259,7 @@ Alle Versionshinweise und neuen Features finden Sie in:
 ## Dependencies
 
 - `paho-mqtt` 2.1.0 - Modern MQTT Client mit VERSION2 API
-- `aiohttp` 3.13.3+ - Async HTTP Client
+- `aiohttp` 3.13.5+ - Async HTTP Client
 - `PyYAML` 6.0.3+ - YAML Config Parser
 
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
