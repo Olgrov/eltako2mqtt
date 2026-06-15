@@ -20,6 +20,15 @@ Dieses Add-on stellt eine Brücke zwischen dem Eltako MiniSafe2 System und MQTT 
 - Wetterstationen (`eltako_weather`) - Temperatur, Wind, Regen, Helligkeit
 - **Rauchmelder (FRWB)** - Rauchalarm + Temperatur ✨ **NEU in v1.2.0**
 
+> Aktuelle Add-on-Version: **v1.2.2** (aiohttp 3.14.1 Security & Compatibility Update)
+
+## 🆕 Was ist neu in v1.2.2?
+
+- Aktualisiert die HTTP-Bibliothek `aiohttp` auf Version **3.14.1**.
+- Synchronisiert alle Build-Umgebungen (`requirements.txt`, Dockerfiles) auf dieselbe Version.
+- Keine Änderungen an Gerätelogik, MQTT-Topics oder Home Assistant Integration.
+- Vollständig rückwärtskompatibel zu v1.2.1 und v1.2.0.
+
 ## 🆕 Was ist neu in v1.2.0?
 
 ### ✨ Neue Geräte
@@ -259,7 +268,7 @@ Alle Versionshinweise und neuen Features finden Sie in:
 ## Dependencies
 
 - `paho-mqtt` 2.1.0 - Modern MQTT Client mit VERSION2 API
-- `aiohttp` 3.13.5+ - Async HTTP Client
+- `aiohttp` 3.14.1 - Async HTTP Client
 - `PyYAML` 6.0.3+ - YAML Config Parser
 
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
