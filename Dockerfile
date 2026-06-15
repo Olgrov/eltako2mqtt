@@ -12,7 +12,7 @@ RUN \
     py3-pip=~23.1 \
     py3-yaml=~6.0 \
   && pip3 install --no-cache-dir \
-    aiohttp==3.13.5 \
+    aiohttp==3.14.1 \
     paho-mqtt==2.1.0 \
     PyYAML==6.0.3
 
