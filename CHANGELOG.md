@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-06-15
+
+### Changed
+- Updated aiohttp dependency from 3.13.5 to 3.14.1 in requirements.txt and both Dockerfiles to keep runtime and build environments in sync.
+- Bumped add-on version to 1.2.2 in config.yaml and Docker image labels.
+
 ## [1.2.1] - 2026-04-02
 
 ### Changed
