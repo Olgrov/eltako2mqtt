@@ -4,6 +4,30 @@ Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Elta
 
 ---
 
+## Version 1.2.2 - aiohttp 3.14.1 Security & Compatibility Update (2026-06-15)
+
+### 🎯 Überblick
+
+Version 1.2.2 ist ein reines Wartungs- und Sicherheitsrelease, das die verwendete `aiohttp`-Version auf **3.14.1** anhebt und sämtliche Build-Umgebungen (Dockerfiles und `requirements.txt`) konsistent aktualisiert.
+
+### 🔐 Änderungen
+
+- Aktualisiert `aiohttp` von `3.13.5` auf `3.14.1` in allen relevanten Komponenten:
+  - `eltako2mqtt/requirements.txt`
+  - `eltako2mqtt/Dockerfile`
+  - root `Dockerfile`
+- Stellt sicher, dass zur Laufzeit und zur Build-Zeit dieselbe HTTP-Bibliothek verwendet wird.
+- Hebt die Add-on-Version auf **1.2.2** in `config.yaml` und im Docker-Label (`io.hass.version`) an.
+
+### ✅ Auswirkungen
+
+- Keine funktionalen Änderungen an unterstützten Geräten (FSR14, FRWB, Blinds, Dimmer etc.).
+- Keine Änderungen an MQTT-Topics oder Home Assistant Discovery.
+- Vollständig rückwärtskompatibel zu v1.2.1 und v1.2.0.
+- Empfohlenes Update, um von den aktuellen Bugfixes und Security-Patches der `aiohttp`-Bibliothek zu profitieren.
+
+---
+
 ## Version 1.2.1 - Dependency & Security Update (2026-04-02)
 
 ### 🎯 Überblick
@@ -171,15 +195,15 @@ sensor:
 5. Konfigurieren Sie das Add-on
 6. Starten Sie das Add-on
 
-#### Update von v1.1.0
+#### Update von v1.1.0 oder v1.2.x
 
 1. Gehen Sie zu **Einstellungen** → **Add-ons** → **Eltako2MQTT**
 2. Klicken Sie auf **UPDATE** (wenn verfügbar)
 3. Starten Sie das Add-on neu
-4. Ihre FSR14 und FRWB Geräte werden automatisch erkannt
+4. Ihre bestehenden Geräte werden automatisch erkannt
 5. Keine Konfigurationsänderungen erforderlich
 
-**Hinweis:** Das Update ist vollständig rückwärtskompatibel. Ihre bestehenden Geräte funktionieren weiterhin ohne Änderungen.
+**Hinweis:** Das Update auf v1.2.2 ist vollständig rückwärtskompatibel. Ihre bestehenden Geräte und Automatisierungen funktionieren weiterhin ohne Änderungen.
 
 ### 🐛 Bekannte Einschränkungen
 
@@ -189,10 +213,10 @@ sensor:
 
 ### ✅ Kompatibilität
 
-- ✅ Vollständig rückwärtskompatibel mit v1.1.0
+- ✅ Vollständig rückwärtskompatibel mit v1.1.0, v1.2.0 und v1.2.1
 - ✅ Keine Breaking Changes
 - ✅ Bestehende Konfigurationen funktionieren ohne Änderungen
-- ✅ Alle bisherigen Geräte (Blinds, Dimmers, Weather) weiterhin voll funktionsfähig
+- ✅ Alle bisherigen Geräte (Blinds, Dimmer, Weather, FSR14, FRWB) weiterhin voll funktionsfähig
 - ✅ Getestet mit Home Assistant 2025.x und 2026.x
 - ✅ Unterstützt alle Architekturen: aarch64, amd64, armhf, armv7, i386
 
