@@ -274,7 +274,7 @@ Hardware feedback for blind 01: position=0%
 
 Too many messages in the logs?
 - ✅ Set `logging.level` to `INFO` or `WARNING`
-- ℹ️ In v1.1.0: DEBUG logging is smart-filtered (only logs recently commanded devices when MQTT connected)
+- ℹ️ In v1.1.0+: DEBUG logging is smart-filtered (only logs recently commanded devices when MQTT connected)
 
 ### Issue: Commands don't work
 
@@ -318,6 +318,6 @@ If nothing works:
 
 ## Version Information
 
-This guide is for **Eltako2MQTT v1.1.0** and later.
+This guide is for **Eltako2MQTT v1.2.2** and later.
 
 For previous versions, see the [CHANGELOG](CHANGELOG.md).
