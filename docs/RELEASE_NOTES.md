@@ -4,6 +4,14 @@ Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Elta
 
 ---
 
+## Version 1.2.4 - aiohttp 3.14.3 Security & Compatibility Update (2026-07-31)
+
+### 🎯 Überblick
+
+Version 1.2.4 ist ein reines Wartungs- und Sicherheitsrelease, das die verwendete `aiohttp`-Version auf **3.14.3** anhebt und sämtliche Build-Umgebungen konsistent aktualisiert.
+
+---
+
 ## Version 1.2.2 - aiohttp 3.14.1 Security & Compatibility Update (2026-06-15)
 
 ### 🎯 Überblick
