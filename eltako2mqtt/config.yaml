@@ -1,6 +1,6 @@
 name: "Eltako2MQTT"
 description: "Eltako MiniSafe2 to MQTT Bridge"
-version: "1.2.3"
+version: "1.2.4"
 slug: "eltako2mqtt"
 init: false
 arch:
@@ -38,11 +38,3 @@ schema:
     host: str
     port: int(1,65535)?
     username: str?
-    password: str?
-    client_id: str?
-  logging:
-    level: list(DEBUG|INFO|WARNING|ERROR)?
-services:
-  - mqtt:need
-ports:
-  8099/tcp: null
