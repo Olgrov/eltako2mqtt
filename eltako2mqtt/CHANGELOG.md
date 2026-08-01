@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.4] - 2026-07-31
+## [1.2.4] - 2026-08-02
 
 ### Changed
 - Updated aiohttp dependency from 3.14.2 to 3.14.3 in requirements.txt.
