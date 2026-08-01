@@ -1,6 +1,6 @@
 name: "Eltako2MQTT"
 description: "Eltako MiniSafe2 to MQTT Bridge"
-version: "1.2.2"
+version: "1.2.4"
 slug: "eltako2mqtt"
 init: false
 arch:
@@ -22,7 +22,7 @@ options:
   eltako:
     host: "192.168.1.100"
     password: ""
-    poll_interval: 5
+    poll_interval: 10
   mqtt:
     host: "core-mosquitto"
     port: 1883
@@ -44,3 +44,7 @@ schema:
     client_id: str?
   logging:
     level: list(DEBUG|INFO|WARNING|ERROR)?
+  services:
+    - mqtt:need
+  ports:
+    8099/tcp: null
