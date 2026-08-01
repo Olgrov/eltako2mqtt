@@ -16,7 +16,6 @@ hassio_role: default
 map:
   - config:rw
   - ssl
-documentation: "https://github.com/Olgrov/eltako2mqtt/blob/main/README.md"
 changelog: "https://github.com/Olgrov/eltako2mqtt/blob/main/eltako2mqtt/CHANGELOG.md"
 options:
   eltako:
