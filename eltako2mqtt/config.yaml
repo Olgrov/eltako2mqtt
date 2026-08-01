@@ -44,3 +44,7 @@ schema:
     client_id: str?
   logging:
     level: list(DEBUG|INFO|WARNING|ERROR)?
+services:
+  - mqtt:need
+ports:
+  8099/tcp: null
