@@ -16,8 +16,6 @@ hassio_role: default
 map:
   - config:rw
   - ssl
-documentation: "https://raw.githubusercontent.com/Olgrov/eltako2mqtt/main/README.md"
-changelog: "https://github.com/Olgrov/eltako2mqtt/blob/main/eltako2mqtt/CHANGELOG.md"
 options:
   eltako:
     host: "192.168.1.100"
