@@ -318,6 +318,6 @@ If nothing works:
 
 ## Version Information
 
-This guide is for **Eltako2MQTT v1.2.2** and later.
+This guide is for **Eltako2MQTT v1.2.5** and later.
 
-For previous versions, see the [CHANGELOG](CHANGELOG.md).
+For previous versions, see the [CHANGELOG](../CHANGELOG.md).

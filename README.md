@@ -20,14 +20,14 @@ Dieses Add-on stellt eine Brücke zwischen dem Eltako MiniSafe2 System und MQTT 
 - Wetterstationen (`eltako_weather`) - Temperatur, Wind, Regen, Helligkeit
 - **Rauchmelder (FRWB)** - Rauchalarm + Temperatur ✨ **NEU in v1.2.0**
 
-> Aktuelle Add-on-Version: **v1.2.4** (aiohttp 3.14.3 Security & Compatibility Update)
+> Aktuelle Add-on-Version: **v1.2.5** (aiohttp 3.14.5 Maintenance Update)
 
-## 🆕 Was ist neu in v1.2.4?
+## 🆕 Was ist neu in v1.2.5?
 
-- Aktualisiert die HTTP-Bibliothek `aiohttp` auf Version **3.14.3**.
+- Aktualisiert die HTTP-Bibliothek `aiohttp` auf Version **3.14.5**.
 - Synchronisiert alle Build-Umgebungen (`requirements.txt`, Dockerfile) auf dieselbe Version.
 - Keine Änderungen an Gerätelogik, MQTT-Topics oder Home Assistant Integration.
-- Vollständig rückwärtskompatibel zu v1.2.3, v1.2.2, v1.2.1 und v1.2.0.
+- Vollständig rückwärtskompatibel zu v1.2.4 und früheren v1.2.x-Versionen.
 
 ## 🆕 Was ist neu in v1.2.2?
 
@@ -269,13 +269,13 @@ Alle vier Helligkeitssensoren (`illumination`, `illumination_east`, `illuminatio
 ## Changelog & Releases
 
 Alle Versionshinweise und neuen Features finden Sie in:
-- [CHANGELOG.md](eltako2mqtt/CHANGELOG.md) - Detaillierter technischer Changelog
+- [CHANGELOG.md](CHANGELOG.md) - Detaillierter technischer Changelog
 - [Releases](https://github.com/Olgrov/eltako2mqtt/releases) - Release Notes mit Upgrade-Hinweisen
 
 ## Dependencies
 
 - `paho-mqtt` 2.1.0 - Modern MQTT Client mit VERSION2 API
-- `aiohttp` 3.14.3 - Async HTTP Client
+- `aiohttp` 3.14.5 - Async HTTP Client
 - `PyYAML` 6.0.3+ - YAML Config Parser
 
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
