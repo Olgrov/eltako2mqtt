@@ -228,9 +228,15 @@ class EltakoMiniSafe2Bridge:
                 text = await response.text()
                 if response.status == 200 and "{XC_SUC}" in text:
                     logger.info(f"Command successful for {sid}: {command}")
-                    await self.update_device_state_immediate(sid, command, device)
+
+                    # Status nicht künstlich setzen.
+                    # Der tatsächliche Zustand wird beim nächsten
+                    # Polling vom MiniSafe2 übernommen.
+                    self._recently_commanded_device = sid
                 else:
-                    logger.error(f"Command failed for {sid} ({command}): {text}")
+                    logger.error(
+                        f"Command failed for {sid} ({command}): {text}"
+                    )
         except Exception as e:
             logger.error(f"Error sending command to {sid}: {e}")
 
