@@ -16,19 +16,20 @@ RUN \
     paho-mqtt==2.1.0 \
     PyYAML==6.0.3
 
-# Copy data for add-on
-COPY run.sh /
+# Copy production and experimental bridge files
+COPY run-experimental.sh /run-experimental.sh
 COPY eltako2mqtt.py /
+COPY eltako2mqtt_experimental.py /
 COPY requirements.txt /
 
-RUN chmod a+x /run.sh
+RUN chmod a+x /run-experimental.sh
 
 # Labels
 LABEL \
-  io.hass.name="Eltako2MQTT" \
-  io.hass.description="Eltako MiniSafe2 to MQTT Bridge" \
+  io.hass.name="Eltako2MQTT Experimental" \
+  io.hass.description="Eltako MiniSafe2 bridge with optimistic Home Assistant feedback" \
   io.hass.arch="armhf|aarch64|i386|amd64|armv7" \
   io.hass.type="addon" \
-  io.hass.version="1.2.5"
+  io.hass.version="1.2.5-test.1"
 
-CMD [ "/run.sh" ]
+CMD [ "/run-experimental.sh" ]
