@@ -4,6 +4,30 @@ Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Elta
 
 ---
 
+## Version 1.2.5 - aiohttp 3.14.5 Maintenance Update (2026-10-27)
+
+### 🎯 Überblick
+
+Version 1.2.5 ist ein Wartungsrelease. Es aktualisiert `aiohttp` von **3.14.3** auf **3.14.5** und synchronisiert die Add-on-Version in `config.yaml`, dem Docker-Image-Label und der Dokumentation.
+
+### 🔧 Änderungen
+
+- `aiohttp` wurde in `requirements.txt` und `Dockerfile` auf **3.14.5** aktualisiert.
+- Die Add-on-Version in `config.yaml` und `io.hass.version` wurde auf **1.2.5** angehoben.
+- README, Installationsanleitung, Changelog und Release Notes wurden für v1.2.5 aktualisiert.
+
+### ✅ Auswirkungen
+
+- Keine Änderungen an Gerätelogik, MQTT-Topics oder Home Assistant Discovery.
+- Keine Konfigurationsmigration erforderlich.
+- Vollständig rückwärtskompatibel zu v1.2.4 und früheren v1.2.x-Versionen.
+
+### 📦 Upgrade
+
+Das Add-on kann direkt über den Home Assistant Add-on Store aktualisiert werden. Bestehende Konfigurationen und Automatisierungen bleiben unverändert.
+
+---
+
 ## Version 1.2.4 - aiohttp 3.14.3 Security & Compatibility Update (2026-07-31)
 
 ### 🎯 Überblick

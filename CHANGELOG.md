@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.5] - 2026-10-27
+
+### Changed
+- Updated `aiohttp` from 3.14.3 to 3.14.5 in `requirements.txt` and `Dockerfile`.
+- Updated the Home Assistant add-on version and Docker image label from 1.2.4 to 1.2.5.
+- Updated README, installation guide, and release documentation for v1.2.5.
+
+### Compatibility
+- No changes to device handling, MQTT topics, Home Assistant discovery, or add-on configuration.
+- Fully backward compatible with v1.2.4 and earlier v1.2.x releases.
+
 ## [1.2.4] - 2026-08-02
 
 ### Changed
