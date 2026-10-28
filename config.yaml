@@ -1,6 +1,6 @@
 name: "Eltako2MQTT Experimental"
 description: "Eltako MiniSafe2 to MQTT Bridge - optimistic state feedback test"
-version: "1.2.5-test.1"
+version: "1.2.5-test.2"
 slug: "eltako2mqtt_experimental"
 init: false
 arch:
