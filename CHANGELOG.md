@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.5-test.3] - 2026-10-30
+
+Experimental test branch only; not a production release.
+
+### Fixed
+- Preserve the latest accepted cover direction across stale or opposite-direction position feedback without changing polled positions.
+- Bound assumed motion with an independent configurable feedback timeout (default 120 seconds), including when polling fails; no command retries or extra polls.
+- Distinguish a position sample after an accepted stop from independently verified motor stop.
+- Ignore missing/invalid dimmer brightness instead of publishing a fabricated zero; retain on/off and RSSI feedback, with per-device warning suppression until recovery.
+- Track recently commanded devices independently, validate GetStates payloads, and cancel superseded/completed timeout tasks.
+
+### Changed
+- Update experimental add-on version, configuration, testing guide, and regression tests. Production bridge unchanged.
+
 ## [1.2.5] - 2026-10-27
 
 ### Changed

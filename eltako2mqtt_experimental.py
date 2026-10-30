@@ -21,17 +21,21 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
     def __init__(self, config_file: str):
         super().__init__(config_file)
         self.poll_interval = self.eltako_config.get("poll_interval", 30)
-        self._command_timeout = self.poll_interval + 60
-        logger.info("Experimental bridge 1.2.5-test.2; poll interval=%ss", self.poll_interval)
+        self._command_timeout = self.eltako_config.get("command_feedback_timeout", 120)
+        logger.info("Experimental bridge 1.2.5-test.3; poll interval=%ss; feedback timeout=%ss",
+                    self.poll_interval, self._command_timeout)
         self.pending_commands: Dict[str, Dict[str, Any]] = {}
         self._last_command_time: Dict[str, float] = {}
         self.minisafe_lock = asyncio.Lock()
         self._last_poll_started: Optional[float] = None
         self._cover_movements: Dict[str, str] = {}
+        self._pending_timeout_tasks: Dict[str, asyncio.Task] = {}
+        self._invalid_brightness = set()
         if self.poll_interval < 30:
             logger.warning("poll_interval below 30 seconds may destabilize MiniSafe2; 30+ is recommended")
 
     async def handle_device_command(self, sid: str, command: str):
+        command = command.strip()
         logger.info(f"Handling command for {sid}: '{command}'")
         if sid not in self.devices:
             logger.warning(f"Unknown device SID: {sid}")
@@ -48,6 +52,7 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
                     if response.status == 200 and "{XC_SUC}" in text:
                         logger.info(f"Command successful for {sid}: {command}")
                         self._track_pending(sid, command, self.devices.get(sid, device))
+                        self._schedule_pending_timeout(sid)
                         await self._publish_command_feedback(sid)
                     else:
                         logger.error(f"Command failed for {sid} ({command}): {text}")
@@ -64,12 +69,12 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
             if cmd == "on":
                 expected["state"] = "on"
             elif cmd == "off":
-                expected = {"state": "off", "level": 0}
+                expected = {"state": "off"}
             elif self.is_numeric(command):
                 value = float(command)
                 level = round(value * 100 / 255) if 0 <= value <= 255 else None
                 if level is not None:
-                    expected = {"state": "on" if level else "off", "level": level}
+                    expected = {"state": "on", "level": level} if level else {"state": "off"}
         elif self.is_switch_device(device_type):
             if cmd in ("on", "off"):
                 expected["state"] = cmd
@@ -92,6 +97,12 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
                 expected["pos"], movement = 100, "closing"
             elif cmd == "stop":
                 movement = "stopped"
+        previous_pending = self.pending_commands.get(sid)
+        if previous_pending:
+            logger.debug("Command superseded for %s: %s -> %s", sid, previous_pending["command"], command)
+        self._clear_pending(sid)
+        if movement:
+            self._cover_movements[sid] = movement
         self.pending_commands[sid] = {"command": command, "expected": expected, "movement": movement, "timestamp": now}
         self._recently_commanded_device = sid
         self._last_command_time[sid] = now
@@ -106,14 +117,18 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
     def _pending_matches(self, pending: Dict[str, Any], device: Dict[str, Any]) -> bool:
         expected = pending.get("expected", {})
         if not expected:
-            return pending.get("movement") == "stopped"
+            # SendSC acceptance and a position sample do not prove a stopped motor.
+            return False
         state = device.get("state", {})
         for key, value in expected.items():
             actual = state.get(key)
             if key in ("pos", "level"):
+                if isinstance(actual, bool):
+                    return False
                 try:
                     actual_number = float(actual)
-                    if not math.isfinite(actual_number) or abs(actual_number - float(value)) > 1:
+                    if (not math.isfinite(actual_number) or not 0 <= actual_number <= 100
+                            or abs(actual_number - float(value)) > 1):
                         return False
                 except (TypeError, ValueError):
                     return False
@@ -132,50 +147,100 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _stationary_cover_state(position: Optional[float]) -> str:
+        return "open" if position == 0 else "closed" if position == 100 else "stopped"
+
+    def _clear_pending(self, sid: str):
+        self.pending_commands.pop(sid, None)
+        task = self._pending_timeout_tasks.pop(sid, None)
+        if task is not None and not task.done() and task is not asyncio.current_task():
+            task.cancel()
+
+    def _schedule_pending_timeout(self, sid: str):
+        pending = self.pending_commands[sid]
+        self._pending_timeout_tasks[sid] = asyncio.create_task(self._pending_watchdog(sid, pending))
+
+    async def _pending_watchdog(self, sid: str, pending: Dict[str, Any]):
+        try:
+            delay = max(0, pending["timestamp"] + self._command_timeout - time.monotonic())
+            await asyncio.sleep(delay)
+            # An old timer must never cancel a replacement command.
+            if self.pending_commands.get(sid) is pending:
+                self._expire_pending(sid)
+                movement = self._cover_movements.get(sid)
+                if movement:
+                    self.mqtt_client.publish(f"eltako/{sid}/movement", movement, retain=False)
+        except asyncio.CancelledError:
+            pass
+
+    def _expire_pending(self, sid: str):
+        pending = self.pending_commands[sid]
+        age = time.monotonic() - pending["timestamp"]
+        logger.warning("Command feedback timeout for %s: %s after %.1fs; "
+                       "target not confirmed, no command retry", sid, pending["command"], age)
+        if pending.get("movement") is not None:
+            position = self._cover_position(self.devices.get(sid, {}))
+            self._cover_movements[sid] = self._stationary_cover_state(position)
+        self._clear_pending(sid)
+
     def _reconcile_pending(self, sid: str, device: Dict[str, Any]):
         pending = self.pending_commands.get(sid)
-        if "blind" in device.get("data", "").lower():
-            position = self._cover_position(device)
+        age = time.monotonic() - pending["timestamp"] if pending else None
+        matched = bool(pending and self._pending_matches(pending, device))
+        is_cover = "blind" in device.get("data", "").lower()
+        position = self._cover_position(device) if is_cover else None
+        is_stop_sample = bool(pending and is_cover and position is not None
+                              and pending["command"].strip().lower() == "stop")
+        if pending and matched:
+            logger.debug("Command confirmed by MiniSafe2 for %s: %s; feedback after %.1fs",
+                         sid, pending["command"], age)
+            self._clear_pending(sid)
+        elif is_stop_sample:
+            logger.debug("Position observed after accepted stop for %s: raw_pos=%s; "
+                         "motor stop not independently verified", sid, position)
+            self._clear_pending(sid)
+        elif pending and age >= self._command_timeout:
+            self._expire_pending(sid)
+
+        if is_cover and position is not None:
             previous = self._cover_position(self.devices.get(sid, {}))
-            movement = None
-            if position is not None:
-                if pending and self._pending_matches(pending, device):
-                    movement = "open" if position == 0 else "closed" if position == 100 else "stopped"
-                elif pending and pending.get("movement") == "stopped":
-                    movement = "stopped"
-                elif previous is not None and position != previous:
-                    # Increasing raw MiniSafe position means closing, unlike HA percent.
-                    movement = ("open" if position == 0 else "closed" if position == 100
-                                else "closing" if position > previous else "opening")
-                elif pending and time.monotonic() - pending["timestamp"] < 2:
-                    # A scheduled poll immediately after SendSC may still contain old data.
-                    movement = pending.get("movement")
-                if movement is None:
-                    movement = "open" if position == 0 else "closed" if position == 100 else "stopped"
-                if not hasattr(self, "_cover_movements"):
-                    self._cover_movements = {}
-                self._cover_movements[sid] = movement
-                logger.debug("Cover poll %s: raw_pos=%s previous=%s movement=%s pending_age=%s",
-                             sid, position, previous, movement,
-                             round(time.monotonic() - pending["timestamp"], 1) if pending else None)
-        if not pending:
-            return
-        age = time.monotonic() - pending["timestamp"]
-        if self._pending_matches(pending, device):
-            logger.debug(f"Command confirmed by MiniSafe2 for {sid}: {pending['command']}")
-            self.pending_commands.pop(sid, None)
-        elif age >= self._command_timeout:
-            logger.warning(f"Command not confirmed for {sid}: {pending['command']}")
-            self.pending_commands.pop(sid, None)
+            active = self.pending_commands.get(sid)
+            if matched or is_stop_sample or (pending and not active):
+                movement = self._stationary_cover_state(position)
+            elif active and active.get("movement"):
+                # Old endpoint or opposite-direction samples can belong to an older
+                # command. Keep the latest accepted direction, not a predicted position.
+                movement = active["movement"]
+                if (previous is not None and position != previous and
+                        ((movement == "opening" and position > previous) or
+                         (movement == "closing" and position < previous))):
+                    logger.debug("Cover %s feedback opposes latest command; keeping assumed %s", sid, movement)
+            elif previous is not None and position != previous:
+                movement = (self._stationary_cover_state(position) if position in (0, 100)
+                            else "closing" if position > previous else "opening")
+            else:
+                movement = self._stationary_cover_state(position)
+            self._cover_movements[sid] = movement
+            logger.debug("Cover poll %s: raw_pos=%s ha_pos=%s previous=%s movement=%s "
+                         "pending_age=%s assumed_motion=%s", sid, position, 100 - position,
+                         previous, movement, round(age, 1) if age is not None else None,
+                         bool(active and movement in ("opening", "closing")))
 
     def _is_recently_commanded(self, sid: str) -> bool:
-        if self._recently_commanded_device != sid:
-            return False
-        last = self._last_command_time.get(sid, 0)
-        if last and time.monotonic() - last < self._command_timeout:
-            return True
-        self._recently_commanded_device = None
-        return False
+        last = self._last_command_time.get(sid)
+        return last is not None and time.monotonic() - last < self._command_timeout
+
+    async def run(self):
+        try:
+            await super().run()
+        finally:
+            tasks = list(self._pending_timeout_tasks.values())
+            for task in tasks:
+                task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            self._pending_timeout_tasks.clear()
 
     async def fetch_device_states(self):
         url = f"{self.base_url}?XC_FNC=GetStates&XC_PASS={base.quote_plus(self.password)}"
@@ -195,7 +260,9 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
                             if response.status == 200:
                                 text = await response.text()
                                 if text.startswith("{XC_SUC}"):
-                                    devices = json.loads(text[8:])
+                                    devices = self._validate_device_states(json.loads(text[8:]))
+                                    if devices is None:
+                                        return None
                                     logger.debug("GetStates completed in %.2fs; devices=%s",
                                                  time.monotonic() - now, len(devices))
                                     return devices
@@ -208,7 +275,49 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
             logger.error("Error fetching device states: %s", type(exc).__name__)
         return None
 
+    @staticmethod
+    def _validate_device_states(payload):
+        if not isinstance(payload, list):
+            logger.error("Invalid GetStates payload: expected device list, got %s", type(payload).__name__)
+            return None
+        valid = []
+        for device in payload:
+            if (not isinstance(device, dict) or not isinstance(device.get("sid"), str)
+                    or not device["sid"] or not isinstance(device.get("data", ""), str)
+                    or not isinstance(device.get("state", {}), dict)):
+                logger.warning("Ignoring malformed GetStates device entry")
+                continue
+            valid.append(device)
+        return valid
+
+    async def _publish_dimmer_state(self, sid: str, device: Dict[str, Any]):
+        state = device.get("state", {})
+        # Preserve RSSI publication from the base implementation.
+        self.mqtt_client.publish(f"eltako/{sid}/rssi", state.get("rssiPercentage", 0), retain=True)
+        actual_state = state.get("state")
+        if isinstance(actual_state, str) and actual_state.lower() in ("on", "off"):
+            self.mqtt_client.publish(f"eltako/{sid}/state", actual_state.lower(), retain=True)
+        raw_level = state.get("level")
+        try:
+            level = float(raw_level)
+            valid = not isinstance(raw_level, bool) and math.isfinite(level) and 0 <= level <= 100
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            if sid not in self._invalid_brightness:
+                logger.warning("Ignoring missing/invalid brightness for %s: %r; "
+                               "preserving last published brightness", sid, raw_level)
+                self._invalid_brightness.add(sid)
+            return
+        if sid in self._invalid_brightness:
+            logger.debug("Valid brightness feedback restored for %s", sid)
+            self._invalid_brightness.discard(sid)
+        self.mqtt_client.publish(f"eltako/{sid}/brightness", round(level * 255 / 100), retain=True)
+
     async def publish_device_state(self, sid: str, device: Dict[str, Any]):
+        if "dimmer" in device.get("data", "").lower():
+            await self._publish_dimmer_state(sid, device)
+            return
         if "blind" not in device.get("data", "").lower():
             await super().publish_device_state(sid, device)
             return
@@ -219,7 +328,7 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
         # Copy only for safe publication; never replace the real cached state with a target.
         normalized = dict(device, state=dict(device.get("state", {}), pos=position))
         await super().publish_device_state(sid, normalized)
-        # Pending is diagnostic, not an authority for polled UI state.
+        # Only the movement label may be assumed; the position above is always polled.
         movement = getattr(self, "_cover_movements", {}).get(sid)
         movement = movement or ("open" if position == 0 else "closed" if position == 100 else "stopped")
         self.mqtt_client.publish(f"eltako/{sid}/movement", movement, retain=False)

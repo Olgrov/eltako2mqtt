@@ -1,55 +1,72 @@
 # Testbranch: Zustandsrückmeldung
 
-## Version 1.2.5-test.2
+## Version 1.2.5-test.3
 
-Diese Testversion korrigiert die Richtungsanzeige und die an den Pending-Timeout gekoppelte Bewegungsanzeige aus test.1. `main` und die produktive Bridge bleiben unverändert.
+Testversion auf `test/optimistic-state-feedback`; kein produktives Release. `main` und `eltako2mqtt.py` bleiben unverändert.
 
-- Home Assistant sendet mit dem vorhandenen `set_position_template` seine eigene Prozentposition: 0 = geschlossen, 100 = offen.
-- Die Bridge sendet unverändert `moveTo(100 - HA-Position)` an den MiniSafe2. Rohstatus und Pending-Ziel verwenden 0 = offen, 100 = geschlossen.
-- Ein Schließbefehl meldet nach erfolgreicher Annahme `closing`, ein Öffnungsbefehl `opening` und ein Stop-Befehl `stopped`.
-- Covers verwenden `optimistic: false`, damit Home Assistant nicht sofort eine erreichte Endposition simuliert. Dimmer und Schalter bleiben optimistisch.
-- Jeder erfolgreiche reguläre Poll veröffentlicht die echte Position. Die Bewegungsanzeige folgt erreichten Zielen oder der Änderung zwischen zwei Rückmeldungen, nicht dem 90-Sekunden-Pending-Timeout. Eine unveränderte Position ohne neue Bewegungsbestätigung beendet die angenommene Bewegung; nur unmittelbar nach dem Befehl gilt eine zweisekündige Grace Period.
-- Aus diskreten Positionswerten lässt sich Bewegung nicht lückenlos nachweisen. `opening`/`closing` aus dem Befehl sind zunächst eine Annahme, kein unabhängiger Motorsensor. Ein unveränderter MiniSafe-Cache kann daher keine weiterhin laufende Fahrt bestätigen.
-- Pending-Timeouts dienen nur Diagnosezwecken und sperren keine Statuspublikation.
-- Keine zusätzlichen `GetStates` nach Befehlen. Startabstände der Abfragen betragen mindestens `poll_interval`, auch beim Start. Wartezeiten und Timeouts können den Abstand verlängern, niemals eine garantierte Hardware-Reaktionszeit erzwingen.
+- Home Assistant sendet 0 = geschlossen, 100 = offen. MiniSafe verwendet die umgekehrte Rohposition: 0 = offen, 100 = geschlossen. Steuerbefehle und MQTT-Gerätetopics bleiben unverändert.
+- Nach erfolgreicher Befehlsannahme erscheint `opening`, `closing` oder bei Stop `stopped`.
+- Alte, unveränderte oder gegenläufige Rückmeldungen beenden/überschreiben eine noch ausstehende Fahrtrichtung nicht vorzeitig. Neue akzeptierte Befehle ersetzen die vorherige Annahme.
+- Erreicht die gültige Rückmeldung das erwartete Ziel (Toleranz 1 Prozentpunkt), endet die Bewegungsannahme beim verarbeitenden Poll. Für Teilpositionen wird `stopped` angezeigt.
+- **Jede gültige Positionsrückmeldung wird unverändert veröffentlicht.** Nur die Bewegungsanzeige wird vorübergehend angenommen. Keine simulierten Positionen und keine zusätzliche `GetStates`-Abfrage nach Befehlen.
+- `opening`/`closing` sind keine gemessenen Motorzustände. Eine Positionsrückmeldung nach Stop bestätigt keinen unabhängigen Motorstillstand; das Log unterscheidet dies nun ausdrücklich.
+- Der unabhängige Timeout begrenzt die Annahme auch bei ausbleibenden erfolgreichen Polls. Danach erscheint eine Warnung und die Anzeige fällt auf den letzten bekannten Positionszustand zurück. Das beweist weder Stillstand noch Befehlsfehlschlag. Kein automatischer Retry.
+- Fehlende/ungültige Dimmerhelligkeit veröffentlicht keinen Ersatzwert 0. Gültige Ein-/Aus-Zustände und RSSI werden weiterhin veröffentlicht. Eine Warnung mit SID erscheint einmal pro Fehlerphase; der letzte gültige Helligkeitswert bleibt erhalten.
+- Covers bleiben `optimistic: false`; Dimmer und Schalter bleiben optimistisch. Ein gemeinsamer Lock serialisiert MiniSafe-HTTP-Zugriffe. GetStates-Startabstände bleiben mindestens `poll_interval`, auch beim Start.
+
+## Konfiguration
+
+Im vorhandenen `eltako`-Block ergänzen; vorhandene Zugangsdaten beibehalten:
+
+```yaml
+eltako:
+  poll_interval: 30
+  command_feedback_timeout: 120
+logging:
+  level: DEBUG
+```
+
+`command_feedback_timeout` ist optional (Default 120 Sekunden, Add-on-Schema 30–900 Sekunden). Es ist **nicht das Pollingintervall**. Den Wert an die längste reale Fahrzeit zuzüglich Rückmeldeverzögerung anpassen. Die Pollingrate nicht verkürzen, um verspätete MiniSafe-Positionswerte zu kaschieren. Aus den Logs allein lassen sich Fahrt und Rückmeldeverzögerung nicht trennen.
 
 ## Aktualisieren
-
-Für eine lokale Installation unter `/addons/eltako2mqtt-experimental`:
 
 ```bash
 cd /addons/eltako2mqtt-experimental
 git pull --ff-only origin test/optimistic-state-feedback
 ```
 
-Danach im Add-on-Store die lokalen Add-ons neu laden beziehungsweise nach Updates suchen. **Eltako2MQTT Experimental auf 1.2.5-test.2 aktualisieren/neu bauen und starten. Ein reiner Neustart des alten Images genügt nicht.** Keine Entitäten löschen; die Discovery wird beim Start erneut veröffentlicht.
+Lokale Add-ons im Store neu laden und **auf 1.2.5-test.3 aktualisieren/neu bauen**. Ein Neustart des alten Images genügt nicht. Keine Entitäten löschen; Discovery wird beim Start erneut veröffentlicht.
 
-Das produktive Add-on während des Tests stoppen: Beide Varianten verwenden dieselben MQTT-Command-Topics und Discovery-IDs. `poll_interval: 30` und `logging.level: DEBUG` einstellen.
+Das produktive Add-on während des Tests stoppen: Beide Varianten verwenden dieselben MQTT-Command-Topics und Discovery-IDs. Nicht parallel betreiben.
 
 ## Regressionstest
 
-1. Vollständig offenen Rollladen über Schließen-Taste schließen: nach Befehlsannahme `wird geschlossen`.
-2. Dasselbe über den Positionsslider auf 0 % ausführen: ebenfalls `wird geschlossen`, Pending-Rohziel 100.
-3. Öffnen-Taste und Slider auf 100 % testen: `wird geöffnet`, Pending-Rohziel 0.
-4. Teilpositionen in beide Richtungen und einen Stop-Befehl testen.
-5. Am nächsten regulären erfolgreichen Poll muss der gelieferte Rohstatus veröffentlicht werden; ein erreichtes Ziel beendet die Bewegungsanzeige sofort, ohne auf den Pending-Timeout zu warten.
-6. Parallel `eltako/+/state` und `eltako/+/movement` beobachten und mit `GetStates`-Logs vergleichen. Keine zusätzlichen Statusabfragen erzwingen.
-7. Externe Bedienung testen; Positionsänderungen müssen beim nächsten Poll ankommen.
-8. Bei unverändertem oder ausbleibendem Rohstatus die Logs sichern: Das Add-on kann keine neue reale Position ermitteln, die der MiniSafe nicht liefert.
+1. Schließen-Taste und Slider 0 %: nach Annahme `wird geschlossen`, MiniSafe-Rohziel 100.
+2. Öffnen-Taste und Slider 100 %: `wird geöffnet`, Rohziel 0.
+3. Alte Position über mehrere Polls: echte Position bleibt sichtbar, angenommene Fahrtrichtung bleibt bis Ziel/Timeout bestehen.
+4. Teilpositionen und rasche Richtungswechsel: neuester akzeptierter Befehl bestimmt die angenommene Richtung; verspätete Gegenbewegung ändert nur die gemeldete Position.
+5. Stop: sofort `stopped`; nächster Poll liefert die tatsächliche Position ohne unbelegte Motorbestätigung.
+6. Ziel erreicht: sofortiger Abschluss am verarbeitenden Poll, kein Warten bis Timeout.
+7. Externe Bedienung: ohne ausstehenden Befehl wird die Richtung aus aufeinanderfolgenden Positionswerten abgeleitet; das ist keine kontinuierliche Bewegungserfassung.
+8. Fehlende Rückmeldung: Timeout beendet die Annahme ohne zusätzliche Hardwareanfrage oder Wiederholung des Steuerbefehls.
+9. Dimmer mit fehlender Helligkeit: kein künstlicher Wert 0, Warnung mit SID, Wiederaufnahme bei gültigem Wert.
 
 ## Debug-Logs
 
-- `Experimental bridge 1.2.5-test.2; poll interval=30s` bestätigt das neue Image.
-- `Command tracking ... raw_target=... movement=...` zeigt die Richtungszuordnung.
-- `GetStates started; interval_since_previous=...` zeigt die tatsächlichen Startabstände.
-- `GetStates completed in ...; devices=...` zeigt erfolgreiche Antworten.
-- `Cover poll ... raw_pos=... previous=... movement=... pending_age=...` trennt MiniSafe-Rückmeldung und UI-Bewegung.
-- `Command not confirmed ...` ist eine Diagnose, keine Wartebedingung für die UI.
+- `Experimental bridge 1.2.5-test.3; poll interval=30s; feedback timeout=120s` identifiziert das neue Image. Die Basisklasse kann zuvor ihren alten Default-Timeout loggen; die experimentelle Startzeile nennt den wirksamen Wert.
+- `Command tracking ... raw_target=... movement=...` zeigt das Rohziel.
+- `Command superseded ...` erklärt ersetzte Befehle.
+- `GetStates started; interval_since_previous=...` und `GetStates completed ...` zeigen Startabstände und Antwortzeiten.
+- `Cover poll ... raw_pos=... ha_pos=... movement=... assumed_motion=...` trennt reale Position und Annahme.
+- `Command feedback timeout ... target not confirmed, no command retry` beendet lediglich die Annahme.
+- `Position observed after accepted stop ... motor stop not independently verified` ist ausdrücklich keine Motorbestätigung.
 
 ## Automatisierte Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 -m py_compile eltako2mqtt.py eltako2mqtt_experimental.py tests/test_experimental_state.py
+bash -n run-experimental.sh
 ```
 
-Die Tests verwenden simulierte HTTP- und MQTT-Schnittstellen. Ein realer MiniSafe2, Home-Assistant-Frontend und Containerbuild müssen zusätzlich praktisch geprüft werden.
+Die Tests verwenden simulierte HTTP-/MQTT-Schnittstellen und nachgestellte Log-Szenarien, keine echte Hardware. Container-Build, MiniSafe2 und Home-Assistant-Frontend müssen zusätzlich praktisch geprüft werden.

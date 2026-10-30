@@ -30,6 +30,6 @@ LABEL \
   io.hass.description="Eltako MiniSafe2 bridge with optimistic Home Assistant feedback" \
   io.hass.arch="armhf|aarch64|i386|amd64|armv7" \
   io.hass.type="addon" \
-  io.hass.version="1.2.5-test.2"
+  io.hass.version="1.2.5-test.3"
 
 CMD [ "/run-experimental.sh" ]

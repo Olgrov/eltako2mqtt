@@ -4,6 +4,10 @@ CONFIG_PATH=/data/options.json
 ELTAKO_HOST=$(bashio::config 'eltako.host')
 ELTAKO_PASSWORD=$(bashio::config 'eltako.password')
 ELTAKO_POLL_INTERVAL=$(bashio::config 'eltako.poll_interval')
+COMMAND_FEEDBACK_TIMEOUT=120
+if bashio::config.has_value 'eltako.command_feedback_timeout'; then
+    COMMAND_FEEDBACK_TIMEOUT=$(bashio::config 'eltako.command_feedback_timeout')
+fi
 MQTT_HOST=$(bashio::config 'mqtt.host')
 MQTT_PORT=$(bashio::config 'mqtt.port')
 MQTT_USERNAME=$(bashio::config 'mqtt.username')
@@ -15,6 +19,7 @@ eltako:
   host: "${ELTAKO_HOST}"
   password: "${ELTAKO_PASSWORD}"
   poll_interval: ${ELTAKO_POLL_INTERVAL}
+  command_feedback_timeout: ${COMMAND_FEEDBACK_TIMEOUT}
 mqtt:
   host: "${MQTT_HOST}"
   port: ${MQTT_PORT}
