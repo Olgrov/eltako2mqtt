@@ -6,6 +6,7 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 try:
     import paho.mqtt.client
@@ -143,18 +144,116 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         b = self.bridge()
         self.assertFalse(b._pending_matches({'expected': {'pos': 100}}, blind('nan')))
 
-    async def test_discovery_disables_cover_position_prediction_only(self):
+    async def discovery_configs(self, bridge, devices):
+        """Inspect the final retained config per topic, as stored by the broker."""
+        bridge.devices = devices
+        await bridge.publish_discovery()
+        configs = {}
+        for topic, payload, retain in bridge.mqtt_client.messages:
+            if topic.endswith('/config'):
+                self.assertTrue(retain, msg=topic)
+                configs[topic] = json.loads(payload)
+        self.assertTrue(configs)
+        return configs
+
+    async def test_discovery_cover_uses_feedback_topics_without_prediction(self):
         b = self.bridge()
-        b.devices = {'01': blind(0), '11': {'data': 'eltako_switch'}, '13': {'data': 'eltako_dimmer'}}
-        await b.publish_discovery()
-        configs = {topic: json.loads(payload) for topic, payload, _ in b.mqtt_client.messages if topic.endswith('/config')}
+        configs = await self.discovery_configs(b, {'01': blind(0)})
+        self.assertEqual(set(configs), {'homeassistant/cover/eltako_blind_01/config'})
         c = configs['homeassistant/cover/eltako_blind_01/config']
-        self.assertFalse(c['optimistic'])
+        self.assertIs(c['optimistic'], False)
+        self.assertEqual(c['unique_id'], 'eltako_blind_01')
+        self.assertEqual(c['device']['identifiers'], ['eltako_01'])
+        self.assertEqual(c['command_topic'], 'eltako/01/set')
+        self.assertEqual(c['set_position_topic'], 'eltako/01/set')
+        self.assertEqual(c['state_topic'], 'eltako/01/movement')
+        self.assertEqual(c['position_topic'], 'eltako/01/state')
         self.assertEqual(c['position_closed'], 100)
         self.assertEqual(c['position_open'], 0)
         self.assertEqual(c['set_position_template'], '{{ position }}')
-        self.assertTrue(configs['homeassistant/light/eltako_dimmer_13/config']['optimistic'])
-        self.assertTrue(configs['homeassistant/switch/eltako_switch_11/config']['optimistic'])
+        for command in ('open', 'close', 'stop'):
+            self.assertEqual(c[f'payload_{command}'], command)
+        for state in ('open', 'opening', 'closed', 'closing', 'stopped'):
+            self.assertEqual(c[f'state_{state}'], state)
+
+    async def test_discovery_position_commands_are_inverted_exactly_once(self):
+        b = self.bridge()
+        configs = await self.discovery_configs(b, {'01': blind(50)})
+        c = configs['homeassistant/cover/eltako_blind_01/config']
+        # HA sends its percentage unchanged; only build_command_url inverts it.
+        self.assertEqual(c['set_position_template'], '{{ position }}')
+        for ha_position, raw_target in ((0, 100), (25, 75), (50, 50), (75, 25), (100, 0)):
+            with self.subTest(ha_position=ha_position):
+                device = blind(50)
+                url = b.build_command_url(device, str(ha_position))
+                self.assertIsNotNone(url)
+                params = parse_qs(urlsplit(url).query)
+                self.assertEqual(params['data'], [f'moveTo{raw_target}'])
+                b._track_pending('01', str(ha_position), device)
+                self.assertEqual(b.pending_commands['01']['expected']['pos'], raw_target)
+                self.assertEqual(device['state']['pos'], 50)
+
+    async def test_discovery_dimmer_is_optimistic_with_real_feedback_topics(self):
+        b = self.bridge()
+        device = {'sid': '13', 'data': 'eltako_dimmer', 'adr': 'dimmer-address',
+                  'state': {'state': 'off', 'level': 0}}
+        configs = await self.discovery_configs(b, {'13': device})
+        self.assertEqual(set(configs), {'homeassistant/light/eltako_dimmer_13/config'})
+        c = configs['homeassistant/light/eltako_dimmer_13/config']
+        self.assertIs(c['optimistic'], True)
+        self.assertEqual(c['unique_id'], 'eltako_dimmer_13')
+        self.assertEqual(c['device']['identifiers'], ['eltako_13'])
+        self.assertEqual(c['command_topic'], 'eltako/13/set')
+        self.assertEqual(c['state_topic'], 'eltako/13/state')
+        self.assertEqual(c['brightness_command_topic'], 'eltako/13/set')
+        self.assertEqual(c['brightness_state_topic'], 'eltako/13/brightness')
+        self.assertEqual(c['brightness_scale'], 255)
+        self.assertEqual(c['payload_on'], 'on')
+        self.assertEqual(c['payload_off'], 'off')
+
+    async def test_discovery_switch_variants_preserve_identity_and_optimism(self):
+        for device_type in ('eltako_switch', 'FSR14', 'FSR14M-2x', 'FSR14SSR',
+                            'F4SR14-LED', 'FAE14LPR', 'FAE14SSR'):
+            with self.subTest(device_type=device_type):
+                b = self.bridge()
+                device = {'sid': '11', 'data': device_type, 'adr': 'switch-address',
+                          'state': {'state': 'off'}}
+                configs = await self.discovery_configs(b, {'11': device})
+                self.assertEqual(set(configs), {'homeassistant/switch/eltako_switch_11/config'})
+                c = configs['homeassistant/switch/eltako_switch_11/config']
+                self.assertIs(c['optimistic'], True)
+                self.assertEqual(c['unique_id'], 'eltako_switch_11')
+                self.assertEqual(c['device']['identifiers'], ['eltako_11'])
+                self.assertEqual(c['device']['model'], device_type)
+                self.assertEqual(c['command_topic'], 'eltako/11/set')
+                self.assertEqual(c['state_topic'], 'eltako/11/state')
+                self.assertEqual(c['payload_on'], 'on')
+                self.assertEqual(c['payload_off'], 'off')
+
+    async def test_discovery_preserves_inherited_smoke_and_weather_sensors(self):
+        b = self.bridge()
+        configs = await self.discovery_configs(b, {
+            '30': {'sid': '30', 'data': 'tf_smoke', 'state': {}},
+            '31': {'sid': '31', 'data': 'eltako_weather', 'state': {}},
+        })
+        expected_topics = {
+            'homeassistant/binary_sensor/eltako_smoke_30/config',
+            'homeassistant/sensor/eltako_smoke_temp_30/config',
+        }
+        for key in ('wind', 'rain', 'temperature', 'illumination',
+                    'illumination_east', 'illumination_south', 'illumination_west'):
+            topic = f'homeassistant/sensor/eltako_weather_{key}_31/config'
+            expected_topics.add(topic)
+            self.assertEqual(configs[topic]['state_topic'], f'eltako/31/{key}')
+        self.assertEqual(set(configs), expected_topics)
+        smoke = configs['homeassistant/binary_sensor/eltako_smoke_30/config']
+        self.assertEqual(smoke['device_class'], 'smoke')
+        self.assertEqual(smoke['unique_id'], 'eltako_smoke_30')
+        self.assertEqual(smoke['state_topic'], 'eltako/30/smoke')
+        temperature = configs['homeassistant/sensor/eltako_smoke_temp_30/config']
+        self.assertEqual(temperature['state_topic'], 'eltako/30/temperature')
+        for config in configs.values():
+            self.assertNotIn('optimistic', config)
 
     def test_polled_switch_state_confirms_command(self):
         b = self.bridge()
