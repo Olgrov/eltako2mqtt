@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 class StateFeedbackBridge(base.EltakoMiniSafe2Bridge):
     def __init__(self, config_file: str):
         super().__init__(config_file)
-        self.poll_interval = self.eltako_config.get("poll_interval", 30)
-        self._command_timeout = self.eltako_config.get("command_feedback_timeout", 120)
         logger.info("Eltako2MQTT 1.3.0; poll interval=%ss; feedback timeout=%ss",
                     self.poll_interval, self._command_timeout)
         self.pending_commands: Dict[str, Dict[str, Any]] = {}
@@ -100,7 +98,6 @@ class StateFeedbackBridge(base.EltakoMiniSafe2Bridge):
         if movement:
             self._cover_movements[sid] = movement
         self.pending_commands[sid] = {"command": command, "expected": expected, "movement": movement, "timestamp": now}
-        self._recently_commanded_device = sid
         self._last_command_time[sid] = now
         logger.debug("Command tracking %s: command=%s raw_target=%s movement=%s",
                      sid, command, expected.get("pos"), movement)

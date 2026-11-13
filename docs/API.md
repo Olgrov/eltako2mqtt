@@ -6,7 +6,7 @@ Es gibt keinen eigenen HTTP-Server und keine öffentliche REST-API der Bridge.
 ## Produktiver Aufbau
 
 - **`eltako2mqtt.py`:** CLI-Einstieg `python3 eltako2mqtt.py CONFIG.yaml`; exportiert `EltakoMiniSafe2Bridge` als Alias der produktiven `StateFeedbackBridge`.
-- **`bridge_base.py`:** Gemeinsame Geräteerkennung, MiniSafe-Befehlsübersetzung, MQTT-VERSION2-Callbacks, Sensorpublikation und Discovery.
+- **`bridge_base.py`:** Abstrakte Basisklasse für gemeinsame Geräteerkennung, MiniSafe-Befehlsübersetzung, MQTT-VERSION2-Callbacks, Sensorpublikation und Discovery; keine zweite, veraltete Befehls-/Pollingimplementierung.
 - **`state_feedback.py`:** Produktive Ableitung mit Pending-Tracking, Watchdog, HTTP-Lock, Poll-Scheduling, validierter Helligkeit und Bewegungsanzeige.
 - **`run.sh`:** Prüft Pflichtoptionen und serialisiert Supervisor-JSON sicher nach YAML, inklusive optionalem Timeout.
 - **`requirements.txt`:** Einzige Abhängigkeitsquelle auch für das Docker-Image.
@@ -14,6 +14,7 @@ Es gibt keinen eigenen HTTP-Server und keine öffentliche REST-API der Bridge.
 
 Es wird kein experimentelles Modul importiert oder gestartet.
 Die Basisklasse alleine ist kein alternativer unterstützter Produktionspfad.
+Sie lässt sich nicht direkt instanziieren; Befehlsbehandlung, Polling, Abruf und gerätebezogene Aktualitätsprüfung sind abstrakte Schnittstellen der konkreten Feedback-Implementierung.
 
 ## Datenfluss und Methoden
 
@@ -75,11 +76,15 @@ python3 -m venv .venv
 pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests
+python tools/check_links.py
 bash -n run.sh
 docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18 -t eltako2mqtt:local .
 docker run --rm --entrypoint python3 eltako2mqtt:local \
   -c 'from eltako2mqtt import EltakoMiniSafe2Bridge; print(EltakoMiniSafe2Bridge.__name__)'
 ```
 
-Die CI prüft Python 3.11/3.14 und baut ein amd64-Image mit Import-Smoke-Test.
+Die CI prüft Python 3.11/3.14 sowie lokale Dokumentationslinks einschließlich Ankern und baut Images mit Import-Smoke-Tests für alle fünf deklarierten Architekturen, bei Bedarf unter QEMU.
 Mocks ersetzen keinen MiniSafe-/Home-Assistant-Hardwaretest; der [Testplan](TESTING_OPTIMISTIC_STATE.md) beschreibt die zusätzliche praktische Prüfung.
+
+Die Basis bleibt in diesem Wartungsschritt bewusst auf Alpine 3.18/Python 3.11.
+Eine unterstützte neue Home-Assistant-Basis wird separat behandelt, da aktuelle Upstream-Basisimages nur noch amd64 und aarch64 abdecken und die 32-Bit-Unterstützung nicht stillschweigend entfallen soll ([Upstream-Basisimages](https://github.com/home-assistant/docker-base)).

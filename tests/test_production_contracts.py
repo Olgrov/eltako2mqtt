@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import nullcontext
 import importlib.metadata
+import inspect
 import io
 import json
 from pathlib import Path
@@ -20,6 +21,8 @@ sys.path.insert(0, str(ROOT))
 
 from eltako2mqtt import EltakoMiniSafe2Bridge
 from state_feedback import StateFeedbackBridge
+from bridge_base import EltakoMiniSafe2Bridge as BridgeBase
+from tools.check_links import check_documents
 
 
 class ProductionContracts(unittest.TestCase):
@@ -38,6 +41,7 @@ class ProductionContracts(unittest.TestCase):
             self.assertTrue((ROOT / source).is_file(), source)
         self.assertIn("pip3 install --no-cache-dir -r /requirements.txt", dockerfile)
         self.assertNotIn("paho-mqtt==", dockerfile)
+        self.assertNotIn("py3-yaml", dockerfile)
         self.assertNotIn("experimental", dockerfile.lower())
         self.assertIn("exec python3 /eltako2mqtt.py", (ROOT / "run.sh").read_text())
 
@@ -53,6 +57,61 @@ class ProductionContracts(unittest.TestCase):
         for requirement in (ROOT / "requirements.txt").read_text().splitlines():
             name, version = requirement.split("==")
             self.assertEqual(importlib.metadata.version(name), version)
+
+    def test_legacy_behavior_cannot_be_instantiated_or_accidentally_reused(self):
+        self.assertTrue(inspect.isabstract(BridgeBase))
+        self.assertFalse(inspect.isabstract(StateFeedbackBridge))
+        self.assertEqual(BridgeBase.__abstractmethods__, {
+            "handle_device_command", "poll_devices", "fetch_device_states",
+            "_is_recently_commanded",
+        })
+        self.assertFalse(hasattr(BridgeBase, "update_device_state_immediate"))
+        self.assertFalse(hasattr(BridgeBase, "eltako_level_to_mqtt_brightness"))
+        with self.assertRaises(TypeError):
+            BridgeBase("unused-config.yaml")
+
+    def test_manifest_requests_only_used_services(self):
+        config = yaml.safe_load((ROOT / "config.yaml").read_text())
+        for key in ("hassio_api", "hassio_role", "map", "ports"):
+            self.assertNotIn(key, config)
+        self.assertEqual(config["services"], ["mqtt:need"])
+
+    def test_architectures_and_base_migration_are_deliberately_unchanged(self):
+        config = yaml.safe_load((ROOT / "config.yaml").read_text())
+        build = yaml.safe_load((ROOT / "build.yaml").read_text())["build_from"]
+        expected = {"aarch64", "amd64", "armhf", "armv7", "i386"}
+        self.assertEqual(set(config["arch"]), expected)
+        self.assertEqual(set(build), expected)
+        for arch, image in build.items():
+            self.assertEqual(image, f"ghcr.io/home-assistant/{arch}-base:3.18")
+        # PyYAML treats the workflow key 'on' as a YAML-1.1 boolean, but jobs
+        # are unaffected. Only inspect the relevant job structure here.
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        matrix = workflow["jobs"]["container"]["strategy"]["matrix"]["include"]
+        self.assertEqual({row["arch"] for row in matrix}, expected)
+
+    def test_google_verification_is_preserved_byte_for_byte(self):
+        self.assertEqual(
+            (ROOT / "google89c77ea745b77da5.html").read_bytes(),
+            b"google-site-verification: google89c77ea745b77da5.html",
+        )
+
+    def test_production_initialization_uses_shared_config_defaults_and_overrides(self):
+        for extra, expected_poll, expected_timeout in (
+            ({}, 30, 120),
+            ({"poll_interval": 60, "command_feedback_timeout": 300}, 60, 300),
+        ):
+            config = {
+                "eltako": {"host": "minisafe", "password": "fixture", **extra},
+                "mqtt": {"host": "broker"},
+            }
+            with patch.object(BridgeBase, "load_config", return_value=config), \
+                    patch("bridge_base.signal.signal"), \
+                    patch("bridge_base.logging.basicConfig"):
+                bridge = StateFeedbackBridge("unused-config.yaml")
+            self.assertEqual(bridge.poll_interval, expected_poll)
+            self.assertEqual(bridge._command_timeout, expected_timeout)
+            self.assertNotIn("_recently_commanded_device", vars(bridge))
 
     def test_launcher_serialization_preserves_credentials_and_optional_defaults(self):
         script = (ROOT / "run.sh").read_text()
@@ -103,10 +162,6 @@ class ProductionContracts(unittest.TestCase):
         self.assertFalse(bridge.mqtt_connected)
 
     def test_documentation_relative_links_resolve(self):
-        documents = [ROOT / "README.md", ROOT / "CHANGELOG.md", *sorted((ROOT / "docs").glob("*.md"))]
-        for document in documents:
-            for target in re.findall(r"\[[^\]]*\]\(([^)\s]+)\)", document.read_text()):
-                if "://" in target or target.startswith("#"):
-                    continue
-                path = target.split("#", 1)[0]
-                self.assertTrue((document.parent / path).exists(), f"{document.name}: {target}")
+        checked, problems = check_documents(ROOT)
+        self.assertGreater(checked, 0)
+        self.assertEqual(problems, [])

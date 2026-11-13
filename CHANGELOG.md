@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Maintenance
+- Remove replaced legacy command/polling implementations and obsolete state tracking from the shared base class; require concrete feedback methods through an abstract interface.
+- Remove unused Supervisor API permissions, config/SSL mounts and the disabled, unused HTTP port from the add-on manifest.
+- Install PyYAML only from `requirements.txt`, without a second Alpine Python-YAML package.
+- Update and pin GitHub Actions, enable Dependabot for Actions, generalize branch filters, and validate container builds for all five declared architectures.
+- Check local documentation links and heading anchors in CI; consolidate experimental history here while retaining the old document URL and headings.
+- Correct historical RSSI/smoke-payload descriptions, add the missing v1.2.3 notes, and clarify the v1.2.4 publication date.
+- Include the complete Apache-2.0 license and preserve the original copyright notice.
+
+### Deliberately unchanged
+- Google site verification, release tags, add-on version 1.3.0, MQTT topics/IDs, Python dependencies and all five declared architectures.
+- Alpine 3.18/Python 3.11 base-image migration is a separate follow-up, not part of this cleanup.
+- No new release is published by this maintenance change.
+
 ## [1.3.0] - 2026-11-13
 
 ### Added
@@ -43,6 +59,26 @@ Experimental test branch only; not a production release.
 
 ### Changed
 - Update experimental add-on version, configuration, testing guide, and regression tests. Production bridge unchanged.
+- Supersede the short stationary-snapshot grace behavior described for test.2 below.
+
+## [1.2.5-test.2] - 2026-10-28
+
+Experimental test branch only; superseded by test.3 and then production v1.3.0.
+
+- Fix inverted movement and pending targets for cover slider commands. Home Assistant sends 0=closed / 100=open; the MiniSafe command/status coordinate is inverted.
+- Stop holding polled movement labels until the diagnostic pending timeout (90 seconds with a 30-second interval). Positions remain published on every successful poll.
+- Disable optimistic endpoint prediction for covers only. Command-accepted movement is still published immediately; switches and dimmers remain optimistic.
+- Accept numeric strings in raw cover positions; reject missing, non-finite, and out-of-range positions without inventing endpoints.
+- Derive polled movement from position changes; an unchanged snapshot stops the assumed motion after a short two-second grace period. This is an estimate, not a motor-running sensor.
+- Space GetStates start times by at least the configured interval, including startup; serialize requests without holding the lock while waiting for the next poll.
+- Add DEBUG logs for request timing, raw position, expected target, movement, and pending age.
+- Add 19 automated regression tests with mocked HTTP/MQTT. Physical hardware, frontend behavior, and container builds still require practical verification.
+
+## [1.2.5-test.1] - 2026-10-27
+
+Experimental test branch only; not a production release.
+
+- Initial isolated optimistic-feedback experiment with cover movement topics, diagnostic pending commands, serialized MiniSafe requests, and 30-second default polling.
 
 ## [1.2.5] - 2026-10-27
 
@@ -55,10 +91,11 @@ Experimental test branch only; not a production release.
 - No changes to device handling, MQTT topics, Home Assistant discovery, or add-on configuration.
 - Fully backward compatible with v1.2.4 and earlier v1.2.x releases.
 
-## [1.2.4] - 2026-08-02
+## [1.2.4] - 2026-09-03
 
 ### Changed
 - Updated aiohttp dependency from 3.14.2 to 3.14.3 in requirements.txt.
+- Date follows the GitHub release publication; the dependency PR was merged on 2026-07-31.
 
 ## [1.2.3] - 2026-07-25
 
@@ -91,7 +128,7 @@ Experimental test branch only; not a production release.
 - **FRWB Smoke Detector Support** - Complete integration for smoke detectors
   - Binary sensor for smoke alarm detection
   - Temperature sensor (built-in FRWB sensor)
-  - RSSI sensor for signal strength monitoring
+  - RSSI MQTT topic for signal strength in percent; no dedicated discovery sensor
 - **`is_switch_device()` Helper Function** - Centralized switch device detection
   - Cleaner, more maintainable code structure
   - Easy extension for future switch variants
@@ -117,7 +154,7 @@ Experimental test branch only; not a production release.
 ### Compatibility
 - Fully backward compatible - no breaking changes
 - Existing configurations work without modification
-- New devices auto-discovered on next poll cycle
+- Device discovery published at bridge startup and when Home Assistant reports online
 
 ## [1.1.0] - 2026-01-09
 

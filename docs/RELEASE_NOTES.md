@@ -2,6 +2,14 @@
 
 Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Eltako2MQTT.
 
+## Noch nicht veröffentlicht - Repository-Wartung
+
+Auf `main` werden ersetzte Altimplementierungen, ungenutzte Manifest-Felder und der doppelte YAML-Installationsweg bereinigt.
+GitHub Actions werden aktualisiert, Container-Builds für alle fünf deklarierten Architekturen und lokale Link-/Ankerprüfungen ergänzt; die experimentelle Historie ist im Haupt-Changelog zusammengeführt.
+Die Google-Verifikation und bisherige Dokumentations-URLs bleiben erhalten.
+Die Basis-Migration bleibt auf ausdrücklichen Wunsch separat; Basisimages, Python-Laufzeit, Add-on-Version und Release-Tags werden hier nicht angehoben.
+Details stehen im [Unreleased-Changelog](../CHANGELOG.md#unreleased).
+
 ## Version 1.3.0 - Produktive Zustandsrückmeldung und MQTT-Update (2026-11-13)
 
 Die erprobte Zustandsrückmeldung aus dem Testbranch ist jetzt Bestandteil des produktiven Add-ons.
@@ -78,11 +86,19 @@ Das Add-on kann direkt über den Home Assistant Add-on Store aktualisiert werden
 
 ---
 
-## Version 1.2.4 - aiohttp 3.14.3 Security & Compatibility Update (2026-07-31)
+## Version 1.2.4 - aiohttp 3.14.3 Security & Compatibility Update (2026-09-03)
 
 ### 🎯 Überblick
 
 Version 1.2.4 ist ein reines Wartungs- und Sicherheitsrelease, das die verwendete `aiohttp`-Version auf **3.14.3** anhebt und sämtliche Build-Umgebungen konsistent aktualisiert.
+Die Datumsangabe folgt der Veröffentlichung des [GitHub-Releases v1.2.4](https://github.com/Olgrov/eltako2mqtt/releases/tag/v1.2.4); das Abhängigkeitsupdate wurde bereits am 31. Juli übernommen.
+
+---
+
+## Version 1.2.3 - aiohttp 3.14.2 Update (2026-07-25)
+
+Version 1.2.3 aktualisiert `aiohttp` von 3.14.1 auf 3.14.2 und gleicht `requirements.txt` und Dockerfile ab.
+Das [GitHub-Release v1.2.3](https://github.com/Olgrov/eltako2mqtt/releases/tag/v1.2.3) wurde am 25. Juli 2026 veröffentlicht; die Geräte- und MQTT-Schnittstellen bleiben unverändert.
 
 ---
 
@@ -174,9 +190,9 @@ Komplette Integration für FRWB Rauchmelder:
 - **Temperatursensor** - Eingebauter Temperatursensor (`sensor`)
   - Einheit: °C
   - Device Class: `temperature`
-- **RSSI Sensor** - Signalstärken-Monitoring (`sensor`)
-  - Einheit: dBm
-  - Device Class: `signal_strength`
+- **RSSI MQTT-Topic** - Signalstärken-Monitoring über `rssiPercentage`
+  - Einheit: Prozent, nicht dBm
+  - Kein eigener automatisch entdeckter RSSI-Sensor
 
 **Funktionen:**
 - Automatische Home Assistant Discovery
@@ -222,7 +238,7 @@ def is_switch_device(self, device_type: str) -> bool:
 ```bash
 # Status
 eltako/{SID}/state          # "on" oder "off"
-eltako/{SID}/rssi           # Signalstärke in dBm
+eltako/{SID}/rssi           # Signalstärke in Prozent
 
 # Befehle
 eltako/{SID}/set            # "on", "off", "toggle"
@@ -232,38 +248,42 @@ eltako/{SID}/set            # "on", "off", "toggle"
 
 ```bash
 # Status
-eltako/{SID}/smoke          # "on" (Alarm) oder "off" (Normal)
+eltako/{SID}/smoke          # "true" (Alarm) oder "false" (Normal)
 eltako/{SID}/temperature    # Temperatur in °C
-eltako/{SID}/rssi           # Signalstärke in dBm
+eltako/{SID}/rssi           # Signalstärke in Prozent
 ```
 
 ### 🏠 Home Assistant Integration
 
 **FSR14 Schalter:**
+
+Die folgenden manuellen MQTT-Beispiele sind an die aktuelle Konfigurationsstruktur angepasst.
+Normalerweise werden die Entitäten automatisch über Discovery erstellt und benötigen keine manuelle YAML-Konfiguration.
+
 ```yaml
-switch:
-  - platform: mqtt
-    name: "Licht Wohnzimmer"
-    state_topic: "eltako/20/state"
-    command_topic: "eltako/20/set"
-    # Automatisch via MQTT Discovery erstellt
+mqtt:
+  switch:
+    - name: "Licht Wohnzimmer"
+      state_topic: "eltako/20/state"
+      command_topic: "eltako/20/set"
+      payload_on: "on"
+      payload_off: "off"
 ```
 
 **FRWB Rauchmelder:**
 ```yaml
-binary_sensor:
-  - platform: mqtt
-    name: "Rauchmelder Küche Alarm"
-    state_topic: "eltako/30/smoke"
-    device_class: smoke
-    
-sensor:
-  - platform: mqtt
-    name: "Rauchmelder Küche Temperatur"
-    state_topic: "eltako/30/temperature"
-    unit_of_measurement: "°C"
-    device_class: temperature
-    # Automatisch via MQTT Discovery erstellt
+mqtt:
+  binary_sensor:
+    - name: "Rauchmelder Küche Alarm"
+      state_topic: "eltako/30/smoke"
+      device_class: smoke
+      payload_on: "true"
+      payload_off: "false"
+  sensor:
+    - name: "Rauchmelder Küche Temperatur"
+      state_topic: "eltako/30/temperature"
+      unit_of_measurement: "°C"
+      device_class: temperature
 ```
 
 ### 📦 Installation & Update

@@ -10,6 +10,7 @@ Modern MQTT callback API for improved compatibility
 """
 
 import asyncio
+from abc import ABC, abstractmethod
 import aiohttp
 import json
 import logging
@@ -24,7 +25,9 @@ import time
 # Placeholder logger - will be configured after loading config
 logger = logging.getLogger(__name__)
 
-class EltakoMiniSafe2Bridge:
+class EltakoMiniSafe2Bridge(ABC):
+    """Shared MQTT/device infrastructure; concrete feedback policy is required."""
+
     def __init__(self, config_file: str):
         # Load config FIRST
         self.config = self.load_config(config_file)
@@ -53,7 +56,6 @@ class EltakoMiniSafe2Bridge:
         self._last_dim_command_time: Dict[str, float] = {}
         self.discovery_count = 0
         self.mqtt_connected = False  # Track MQTT connection state
-        self._recently_commanded_device: Optional[str] = None  # Track last commanded device
 
         signal.signal(signal.SIGTERM, self.signal_handler)
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -178,8 +180,6 @@ class EltakoMiniSafe2Bridge:
                     # Prüfe, ob Payload numerisch (dim-Level oder Position)
                     if self.is_numeric(payload):
                         self._last_dim_command_time[sid] = now
-                        # Track this device as recently commanded
-                        self._recently_commanded_device = sid
 
                 asyncio.run_coroutine_threadsafe(self.handle_device_command(sid, payload), self.loop)
 
@@ -209,28 +209,10 @@ class EltakoMiniSafe2Bridge:
         except ValueError:
             return False
 
+    @abstractmethod
     async def handle_device_command(self, sid: str, command: str):
-        logger.info(f"Handling command for {sid}: '{command}'")
-        if sid not in self.devices:
-            logger.warning(f"Unknown device SID: {sid}")
-            return
-
-        device = self.devices[sid]
-        url = self.build_command_url(device, command)
-        if not url:
-            logger.warning(f"Ignoring unsupported command: {command}")
-            return
-
-        try:
-            async with self.session.get(url) as response:
-                text = await response.text()
-                if response.status == 200 and "{XC_SUC}" in text:
-                    logger.info(f"Command successful for {sid}: {command}")
-                    await self.update_device_state_immediate(sid, command, device)
-                else:
-                    logger.error(f"Command failed for {sid} ({command}): {text}")
-        except Exception as e:
-            logger.error(f"Error sending command to {sid}: {e}")
+        """Send a command using the concrete bridge's feedback policy."""
+        raise NotImplementedError
 
     def build_command_url(self, device: Dict[str, Any], command: str) -> Optional[str]:
         device_type = device.get('data', '')
@@ -249,8 +231,6 @@ class EltakoMiniSafe2Bridge:
                     val = float(command)
                     if 0 <= val <= 255:
                         level = round(val * 100 / 255)
-                    elif 0 <= val <= 100:
-                        level = int(val)
                     else:
                         logger.warning(f"Dimmer value out of range: {val}")
                         return None
@@ -304,82 +284,10 @@ class EltakoMiniSafe2Bridge:
     def _build_url(self, address: str, cmd_data: str) -> str:
         return f"{self.base_url}?XC_FNC=SendSC&type=ENOCEAN&address={address}&data={cmd_data}&XC_PASS={quote_plus(self.password)}"
 
-    async def update_device_state_immediate(self, sid: str, command: str, device: Dict[str, Any]):
-        if sid not in self.devices:
-            return
-
-        device_type = device.get('data', '')
-        cmd_lower = command.strip().lower()
-        val_numeric = None
-
-        try:
-            val_numeric = float(command)
-            is_numeric = True
-        except Exception:
-            is_numeric = False
-
-        if 'dimmer' in device_type.lower():
-            if cmd_lower == 'on':
-                device['state']['state'] = 'on'
-                if device['state'].get('level', 0) == 0:
-                    device['state']['level'] = 100
-            elif cmd_lower == 'off':
-                device['state']['state'] = 'off'
-                device['state']['level'] = 0
-            elif is_numeric:
-                if 0 <= val_numeric <= 255:
-                    level = round(val_numeric * 100 / 255)
-                elif 0 <= val_numeric <= 100:
-                    level = int(val_numeric)
-                else:
-                    return
-                device['state']['level'] = level
-                device['state']['state'] = 'on' if level > 0 else 'off'
-            await self.publish_device_state(sid, device)
-        elif self.is_switch_device(device_type):
-            if cmd_lower in ['on', 'off']:
-                device['state']['state'] = cmd_lower
-            elif cmd_lower == 'toggle':
-                current = device['state'].get('state', 'off')
-                device['state']['state'] = 'off' if current == 'on' else 'on'
-            await self.publish_device_state(sid, device)
-        elif 'blind' in device_type.lower() or 'tf_blind' in device_type.lower():
-            # For blinds: DO NOT update state immediately!
-            # Wait for the actual hardware state to be polled and reported.
-            # This prevents the UI from jumping to the inverted position.
-            logger.debug(f"Blind command sent for {sid}, waiting for hardware feedback...")
-            return
-
-    def eltako_level_to_mqtt_brightness(self, level: int) -> int:
-        """Convert 0-100 to 0-255 brightness"""
-        # Validiere Input
-        if level is None or (isinstance(level, str) and not level.isdigit()):
-            logger.warning(f"Invalid brightness level: {level}, using 0")
-            level = 0
-        
-        # Konvertiere sicher
-        try:
-            level = int(float(level))
-        except (ValueError, TypeError):
-            level = 0
-        
-        # Clamp und konvertiere
-        level = max(0, min(level, 100))
-        return round(level * 255 / 100)
-
+    @abstractmethod
     def _is_recently_commanded(self, sid: str) -> bool:
-        """Check if device was recently commanded"""
-        if not self._recently_commanded_device or self._recently_commanded_device != sid:
-            return False
-        
-        # Check if command was within timeout window
-        last_time = self._last_dim_command_time.get(sid, 0)
-        if last_time and (time.monotonic() - last_time) < self._command_timeout:
-            return True
-        
-        # Clear if timeout exceeded
-        self._recently_commanded_device = None
-        return False
+        """Check the concrete bridge's per-device command tracking."""
+        raise NotImplementedError
 
     def _log_device_feedback(self, sid: str, device: Dict[str, Any]):
         """Log device state feedback for debugging (only if MQTT is connected and device was recently commanded)"""
@@ -428,12 +336,6 @@ class EltakoMiniSafe2Bridge:
         elif self.is_switch_device(device_type):
             st = state.get("state", "off")
             self.mqtt_client.publish(f"{base}/state", st, retain=True)
-        elif "dimmer" in device_type.lower():
-            st = state.get("state", "off")
-            level = state.get("level", 0)
-            brightness = self.eltako_level_to_mqtt_brightness(level)
-            self.mqtt_client.publish(f"{base}/state", st, retain=True)
-            self.mqtt_client.publish(f"{base}/brightness", brightness, retain=True)
         elif "weather" in device_type.lower():
             vals = {
                 "wind": state.get("wind", 0),
@@ -599,38 +501,15 @@ class EltakoMiniSafe2Bridge:
         
         logger.info(f"Published {self.discovery_count} discovery configurations")
 
+    @abstractmethod
     async def poll_devices(self):
-        while self.running:
-            try:
-                devices = await self.fetch_device_states()
-                if devices:
-                    for device in devices:
-                        sid = device.get("sid")
-                        if sid:
-                            self.devices[sid] = device
-                            await self.publish_device_state(sid, device)
-                            # Log hardware feedback in debug mode (only if MQTT connected and recently commanded)
-                            self._log_device_feedback(sid, device)
-                await asyncio.sleep(self.poll_interval)
-            except Exception as e:
-                logger.error(f"Polling error: {e}")
-                await asyncio.sleep(self.poll_interval)
+        """Run the concrete bridge's scheduled polling loop."""
+        raise NotImplementedError
 
-    async def fetch_device_states(self) -> Optional[Dict[str, Any]]:
-        url = f"{self.base_url}?XC_FNC=GetStates&XC_PASS={quote_plus(self.password)}"
-        try:
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    text = await response.text()
-                    if text.startswith("{XC_SUC}"):
-                        json_data = text[8:]
-                        return json.loads(json_data)
-                    logger.error(f"Unexpected response: {text}")
-                else:
-                    logger.error(f"HTTP error {response.status}")
-        except Exception as e:
-            logger.error(f"Error fetching device states: {e}")
-        return None
+    @abstractmethod
+    async def fetch_device_states(self) -> Optional[list[Dict[str, Any]]]:
+        """Fetch validated device states using the concrete request policy."""
+        raise NotImplementedError
 
     async def run(self):
         logger.info("Starting Eltako2MQTT Bridge (paho-mqtt 2.2.0 - CallbackAPIVersion.VERSION2)")
