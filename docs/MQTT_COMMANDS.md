@@ -1,393 +1,112 @@
-# MQTT Commands Reference
-
-## Overview
-
-This document provides a complete reference for all MQTT commands supported by Eltako2MQTT v1.1.0.
-
----
-
-## Topic Structure
-
-All commands follow this pattern:
-
-```
-eltako/{SID}/set
-```
-
-Where `{SID}` is the device ID (e.g., `01`, `11`, `13`).
-
-### Find Your Device IDs
-
-Check the add-on logs:
-```
-Found device 01: eltako_blind
-Found device 11: eltako_switch
-Found device 13: eltako_dimmer
-```
-
----
-
-## Device Types & Commands
-
-### 🪟 Blinds / Rollos (eltako_blind, eltako_tf_blind)
-
-#### Commands
-
-| Command | Effect | MQTT Topic | Payload |
-|---------|--------|-----------|----------|
-| Open | Open fully (position 0%) | `eltako/{SID}/set` | `open` |
-| Close | Close fully (position 100%) | `eltako/{SID}/set` | `close` |
-| Stop | Stop current movement | `eltako/{SID}/set` | `stop` |
-| Move Up | Move towards open | `eltako/{SID}/set` | `moveup` |
-| Move Down | Move towards closed | `eltako/{SID}/set` | `movedown` |
-| Set Position | Move to specific position (0-100%) | `eltako/{SID}/set` | `0` to `100` |
-
-#### Examples
-
-**Open blind completely:**
-```bash
-mosquitto_pub -t "eltako/01/set" -m "open"
-```
-
-**Close blind completely:**
-```bash
-mosquitto_pub -t "eltako/01/set" -m "close"
-```
-
-**Move to 50% position (half open):**
-```bash
-mosquitto_pub -t "eltako/01/set" -m "50"
-```
-
-**Move up slightly:**
-```bash
-mosquitto_pub -t "eltako/01/set" -m "moveup"
-```
-
-**Stop movement:**
-```bash
-mosquitto_pub -t "eltako/01/set" -m "stop"
-```
-
-#### Status Topics
-
-| Topic | Value | Meaning |
-|-------|-------|----------|
-| `eltako/{SID}/state` | 0-100 | Current blind position (%) |
-| `eltako/{SID}/sync` | true/false | Synchronization status |
-| `eltako/{SID}/rssi` | 0-100 | Signal strength (%) |
-| `eltako/{SID}/rv` | number | Reserve voltage |
-| `eltako/{SID}/rt` | number | Response time |
-
-#### Position Details (v1.1.0)
-
-- Position is automatically inverted for Eltako compatibility
-- 0% = Fully open
-- 100% = Fully closed
-- Home Assistant UI shows correct position
-- State update waits for hardware feedback (not immediate)
-
----
-
-### 🔌 Switches (eltako_switch, eltako_tf_switch)
-
-#### Commands
-
-| Command | Effect | MQTT Topic | Payload |
-|---------|--------|-----------|----------|
-| On | Turn on | `eltako/{SID}/set` | `on` |
-| Off | Turn off | `eltako/{SID}/set` | `off` |
-| Toggle | Toggle state | `eltako/{SID}/set` | `toggle` |
-
-#### Examples
-
-**Turn on:**
-```bash
-mosquitto_pub -t "eltako/11/set" -m "on"
-```
-
-**Turn off:**
-```bash
-mosquitto_pub -t "eltako/11/set" -m "off"
-```
-
-**Toggle (on→off or off→on):**
-```bash
-mosquitto_pub -t "eltako/11/set" -m "toggle"
-```
-
-#### Status Topics
-
-| Topic | Value | Meaning |
-|-------|-------|----------|
-| `eltako/{SID}/state` | on/off | Current switch state |
-| `eltako/{SID}/rssi` | 0-100 | Signal strength (%) |
-
----
-
-### 💡 Dimmers (eltako_dimmer, eltako_tf_dimmer)
-
-#### Commands
-
-| Command | Effect | MQTT Topic | Payload |
-|---------|--------|-----------|----------|
-| On | Turn on (full brightness) | `eltako/{SID}/set` | `on` |
-| Off | Turn off | `eltako/{SID}/set` | `off` |
-| Set Brightness | Set brightness 0-100% | `eltako/{SID}/set` | `0` to `100` |
-| Set Brightness | Set brightness 0-255 scale | `eltako/{SID}/set` | `0` to `255` |
-
-#### Examples
-
-**Turn on (full brightness):**
-```bash
-mosquitto_pub -t "eltako/13/set" -m "on"
-```
-
-**Turn off:**
-```bash
-mosquitto_pub -t "eltako/13/set" -m "off"
-```
-
-**Dim to 50% brightness:**
-```bash
-mosquitto_pub -t "eltako/13/set" -m "50"
-```
-
-**Dim to brightness level 200 (0-255 scale):**
-```bash
-mosquitto_pub -t "eltako/13/set" -m "200"
-```
-
-**Dim to 25% brightness:**
-```bash
-mosquitto_pub -t "eltako/13/set" -m "25"
-```
-
-#### Status Topics
-
-| Topic | Value | Meaning |
-|-------|-------|----------|
-| `eltako/{SID}/state` | on/off | Current dimmer state |
-| `eltako/{SID}/brightness` | 0-255 | Brightness level (0-255 scale) |
-| `eltako/{SID}/rssi` | 0-100 | Signal strength (%) |
-
-#### Brightness Handling (v1.1.0)
-
-- Supports both 0-100% and 0-255 scales
-- Automatic scale detection
-- Defensive validation prevents crashes
-- Invalid values gracefully fallback to 0
-- Example: `"invalid_value"` → logs warning, uses 0 (off)
-
----
-
-### 🌤️ Weather Stations (eltako_weather)
-
-Weather stations are **read-only** - no commands can be sent.
-
-#### Status Topics (Read-Only)
-
-| Topic | Value | Unit | Meaning |
-|-------|-------|------|----------|
-| `eltako/{SID}/temperature` | number | °C | Ambient temperature |
-| `eltako/{SID}/wind` | number | m/s | Wind speed |
-| `eltako/{SID}/rain` | true/false | - | Rain detected |
-| `eltako/{SID}/illumination` | number | lx | Total illumination |
-| `eltako/{SID}/illumination_east` | number | lx | East-facing illumination |
-| `eltako/{SID}/illumination_south` | number | lx | South-facing illumination |
-| `eltako/{SID}/illumination_west` | number | lx | West-facing illumination |
-| `eltako/{SID}/rssi` | 0-100 | - | Signal strength (%) |
-
-#### Notes
-
-- All values update automatically at `poll_interval` (default: 5 seconds)
-- Illumination values are in Lux (lx)
-- Wind speed in meters per second (m/s)
-- Temperature in Celsius (°C)
-- Rain is a boolean (true/false or 1/0)
-
----
-
-## General Topics
-
-### All Devices
-
-**Signal Strength (RSSI):**
-```
-eltako/{SID}/rssi
-```
-
-Value: 0-100 (percentage)
-
-Example:
-```bash
-mosquitto_sub -t "eltako/+/rssi"
-# Output: eltako/01/rssi 85
-```
-
----
-
-## Testing Commands
-
-### Using Home Assistant Developer Tools
-
-1. Go to **Developer Tools** → **MQTT**
-2. Under "Publish a packet":
-   - **Topic:** `eltako/01/set`
-   - **Payload:** `open`
-   - Click **Publish**
-
-### Using Command Line (mosquitto_pub)
-
-**Open blind:**
-```bash
-mosquitto_pub -h 192.168.1.100 -t "eltako/01/set" -m "open"
-```
-
-**Turn on light:**
-```bash
-mosquitto_pub -h 192.168.1.100 -t "eltako/13/set" -m "on"
-```
-
-### Monitoring State Changes
-
-**Watch all device updates:**
-```bash
-mosquitto_sub -h 192.168.1.100 -t "eltako/#"
-```
-
-**Watch specific device:**
-```bash
-mosquitto_sub -h 192.168.1.100 -t "eltako/01/#"
-```
-
----
-
-## Response Times
-
-Typical response times after command:
-
-| Device Type | Feedback Time | Notes |
-|-------------|---------------|-------|
-| Blind | 0.5-2 seconds | Depends on movement speed |
-| Switch | <1 second | Usually immediate |
-| Dimmer | <1 second | Usually immediate |
-| Weather | Up to 5 seconds | Depends on poll_interval |
-
----
-
-## Error Handling (v1.1.0)
-
-### Invalid Commands
-
-Invalid payloads are silently ignored:
+# MQTT-Referenz für Eltako2MQTT v1.3.0
+
+Geräte verwenden `eltako/{SID}/...`, wobei `{SID}` die vom MiniSafe gelieferte Gerätekennung ist.
+Befehle werden auf `eltako/{SID}/set` gesendet und dürfen nicht retained sein, damit ein Neustart keine alten Fahrbefehle wiederholt.
+
+## Rollläden und Jalousien
+
+| Payload auf `/set` | Wirkung |
+| --- | --- |
+| `open`, `up` | Öffnen, MiniSafe `moveup`, Rohziel 0 |
+| `close`, `down` | Schließen, MiniSafe `movedown`, Rohziel 100 |
+| `stop` | Stop senden; keine unabhängige Motorbestätigung |
+| `0` | Schließen, MiniSafe `moveTo100` |
+| `100` | Öffnen, MiniSafe `moveTo0` |
+| `25` | 25 Prozent offen, MiniSafe `moveTo75` |
+
+Numerische Befehle verwenden die Home-Assistant-Skala 0=geschlossen und 100=offen.
+Die Bridge invertiert einmal beim Erstellen des MiniSafe-Befehls; eigene Publisher dürfen nicht zusätzlich invertieren.
+
+| Topic | Wert | Retained |
+| --- | --- | --- |
+| `eltako/{SID}/state` | MiniSafe-Rohposition 0=offen, 100=geschlossen | ja |
+| `eltako/{SID}/movement` | `opening`, `closing`, `open`, `closed`, `stopped` | nein |
+| `eltako/{SID}/sync` | Vom MiniSafe gelieferter Synchronisationswert | ja |
+| `eltako/{SID}/rv` | MiniSafe-Rohwert `rv` | ja |
+| `eltako/{SID}/rt` | MiniSafe-Rohwert `rt` | ja |
+| `eltako/{SID}/rssi` | `rssiPercentage`, Prozent | ja |
+
+Home Assistant erhält `position_closed: 100`, `position_open: 0` und `set_position_template: "{{ position }}"`.
+Das numerische `/state` ist weder ein Motorzustand noch die Home-Assistant-Positionsskala, und ein `/pos`-Topic existiert nicht.
+
+Nach erfolgreicher HTTP-Befehlsannahme wird nur die Bewegungsanzeige sofort publiziert.
+Ein ausstehender Befehl hält seine angenommene Richtung über alte oder gegenläufige Positionsproben hinweg, bis Zielbestätigung, Ersatzbefehl oder Timeout erfolgt.
+Jede gültige gepollte Position bleibt unverändert sichtbar.
+Zielerkennung toleriert einen Prozentpunkt; am Teilziel wird `stopped` veröffentlicht, ohne die echte Position auf den Zielwert zu setzen.
+
+Ohne ausstehenden Befehl wird Bewegung aus aufeinanderfolgenden Positionen abgeleitet.
+Ein unveränderter Wert führt dann zu `stopped` bzw. `open`/`closed` am exakten Endpunkt; dies ist keine kontinuierliche Motorerfassung.
+Der Feedback-Timeout beendet nur die Annahme, nicht die reale Fahrt.
+
+## Schalter und Dimmer
+
+| Gerät | Payload auf `/set` | Status |
+| --- | --- | --- |
+| Schalter einschließlich FSR14/FAE14 | `on`, `off`, `toggle` | `/state`: `on` oder `off` |
+| Dimmer | `on`, `off`, numerisch 0–255 | `/state`: `on` oder `off`; `/brightness`: 0–255 |
+
+Dimmerwerte werden mit `round(Wert * 100 / 255)` auf MiniSafe-Level umgerechnet.
+128 entspricht ungefähr 50 Prozent; 50 ist nicht 50 Prozent, sondern ein Wert der 0–255-Skala.
+Ein numerischer Wert, der auf Level 0 rundet, sendet `off`; ansonsten wird genau ein `dimToX` gesendet.
+Ein direkt anschließendes `on` wird bei kürzlich empfangenem numerischem Befehl innerhalb von 1,5 Sekunden unterdrückt.
+
+Home Assistant verwendet für Schalter/Dimmer `optimistic: true` und reale State-Topics.
+Der UI-Zustand kann somit vorläufig reagieren, während externe MQTT-Abonnenten erst die regulär gepollten Zustände erhalten.
+Ungültige oder fehlende Dimmerhelligkeit erzeugt keinen Ersatzwert 0; gültige Ein-/Aus-Werte und RSSI werden weiter veröffentlicht.
+State, Brightness und RSSI sind retained.
+
+## Wetterstationen und Rauchmelder
+
+| Topic | Wert |
+| --- | --- |
+| `eltako/{SID}/wind` | Wind in m/s |
+| `eltako/{SID}/rain` | Text `true` oder `false` |
+| `eltako/{SID}/temperature` | Temperatur in °C |
+| `eltako/{SID}/illumination` | Gerundete Beleuchtungsstärke in lx |
+| `eltako/{SID}/illumination_east` | MiniSafe `s1` × 1000, gerundet, lx |
+| `eltako/{SID}/illumination_south` | MiniSafe `s2` × 1000, gerundet, lx |
+| `eltako/{SID}/illumination_west` | MiniSafe `s3` × 1000, gerundet, lx |
+| `eltako/{SID}/smoke` | Rauchmelder: Text `true` oder `false` |
+| `eltako/{SID}/rssi` | Signalstärke in Prozent, nicht dBm |
+
+Diese Topics sind read-only und retained.
+Rauchmelder veröffentlichen `/smoke`, `/temperature` und `/rssi`; Wetterstationen die Wetterwerte und `/rssi`.
+RSSI wird veröffentlicht, aber nicht als eigener Discovery-Sensor erzeugt.
+Rauch wird als Binary-Sensor mit `payload_on: "true"` und `payload_off: "false"` entdeckt; die MQTT-Payloads lauten nicht `on`/`off`.
+
+## Discovery und Verfügbarkeit
+
+- **Discovery:** Retained unter `homeassistant/{component}/{unique_id}/config`; IDs und Gerätetopics bleiben gegenüber der Produktion stabil.
+- **Komponenten:** Cover, Switch, Light, sieben Wetter-Sensoren sowie Rauch-Binary-Sensor und Temperatur-Sensor.
+- **Neuveröffentlichung:** Beim Start und bei `homeassistant/status` mit Payload `online`.
+- **Verfügbarkeit:** Kein LWT-/Availability-Topic und keine Garantie, dass retained Zustände aktuell sind.
+
+Polling erfolgt standardmäßig alle 30 Sekunden, gemessen zwischen den Starts von `GetStates`.
+Lange Requests können den Abstand vergrößern; MiniSafe-Zugriffe sind serialisiert und ein Befehl kann einen laufenden HTTP-Request abwarten müssen.
+Es gibt weder eine garantierte Rückmeldezeit noch einen zusätzlichen Poll pro Befehl.
+
+## CLI- und Home-Assistant-Beispiele
 
 ```bash
-# These are ignored:
-mosquitto_pub -t "eltako/01/set" -m "invalid"
-mosquitto_pub -t "eltako/13/set" -m "999"
-mosquitto_pub -t "eltako/13/set" -m "abc"
+mosquitto_sub -h BROKER -v -t 'eltako/#'
+mosquitto_sub -h BROKER -v -t 'homeassistant/#'
+mosquitto_pub -h BROKER -t eltako/01/set -m open
+mosquitto_pub -h BROKER -t eltako/01/set -m 25
+mosquitto_pub -h BROKER -t eltako/01/set -m stop
+mosquitto_pub -h BROKER -t eltako/20/set -m toggle
+mosquitto_pub -h BROKER -t eltako/13/set -m 128
 ```
 
-Check logs (set to DEBUG) to see warnings.
-
-### Connection Issues
-
-If commands don't work:
-1. Check MQTT connection in Home Assistant logs
-2. Verify device ID is correct
-3. Ensure MiniSafe2 is responsive
-4. Check command payload is valid
-5. Enable DEBUG logging for details
-
----
-
-## Home Assistant Automation Examples
-
-### Automate Blind Opening at Sunrise
+Broker-Host und SID ersetzen sowie bei Bedarf Broker-Authentifizierung ergänzen.
+In Home Assistant kann derselbe Befehl über `mqtt.publish` ohne retained Flag gesendet werden.
 
 ```yaml
-automation:
-  - alias: "Open blinds at sunrise"
-    trigger:
-      platform: sun
-      event: sunrise
-    action:
-      service: mqtt.publish
-      data:
-        topic: "eltako/01/set"
-        payload: "open"
+action: mqtt.publish
+data:
+  topic: "eltako/01/set"
+  payload: "100"
+  retain: false
 ```
 
-### Dim Light Based on Time
-
-```yaml
-automation:
-  - alias: "Evening dimming"
-    trigger:
-      platform: time
-      at: "18:00:00"
-    action:
-      service: mqtt.publish
-      data:
-        topic: "eltako/13/set"
-        payload: "50"  # 50% brightness
-```
-
-### Turn Off When Away
-
-```yaml
-automation:
-  - alias: "Turn off when away"
-    trigger:
-      platform: state
-      entity_id: group.all_people
-      to: "not_home"
-    action:
-      service: mqtt.publish
-      data:
-        topic: "eltako/11/set"
-        payload: "off"
-```
-
----
-
-## Troubleshooting Commands
-
-### Test MQTT Connection
-
-```bash
-# Subscribe to all eltako messages
-mosquitto_sub -t "eltako/#" -v
-
-# In another terminal, publish a test command
-mosquitto_pub -t "eltako/01/set" -m "open"
-
-# You should see: eltako/01/set open
-```
-
-### Monitor Command Execution
-
-1. Enable DEBUG logging in add-on configuration
-2. Restart add-on
-3. Send a command
-4. Check logs for:
-   - "Command successful for"
-   - "Hardware feedback for"
-
-### Check Device Responsiveness
-
-```bash
-# Monitor device state
-mosquitto_sub -t "eltako/01/state" -v
-
-# Send a command
-mosquitto_pub -t "eltako/01/set" -m "50"
-
-# You should see state change within 5-10 seconds:
-# eltako/01/state 50
-```
-
----
-
-For more help, see [INSTALLATION.md](INSTALLATION.md) or [README.md](README.md).
+Für die normale Bedienung die automatisch entdeckten Entitäten verwenden.
+Bei Fehlern [Installation/Diagnose](INSTALLATION.md) und [Feedback-Testplan](TESTING_OPTIMISTIC_STATE.md) konsultieren.

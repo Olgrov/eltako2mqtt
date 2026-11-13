@@ -1,74 +1,36 @@
 #!/usr/bin/with-contenv bashio
+set -euo pipefail
 
-set -e
+for key in eltako.host eltako.password mqtt.host; do
+    if ! bashio::config.has_value "${key}"; then
+        bashio::log.fatal "Required option ${key} is not configured"
+        bashio::exit.nok
+    fi
+done
 
-# Configuration
-CONFIG_PATH=/data/options.json
+# Read Supervisor JSON directly: YAML interpolation/sed can corrupt passwords
+# containing quotes, backslashes, newlines, or shell metacharacters.
+umask 077
+python3 - <<'PY'
+import json
+import yaml
 
-# Parse configuration
-ELTAKO_HOST=$(bashio::config 'eltako.host')
-ELTAKO_PASSWORD=$(bashio::config 'eltako.password')
-ELTAKO_POLL_INTERVAL=$(bashio::config 'eltako.poll_interval')
-MQTT_HOST=$(bashio::config 'mqtt.host')
-MQTT_PORT=$(bashio::config 'mqtt.port')
-MQTT_USERNAME=$(bashio::config 'mqtt.username')
-MQTT_PASSWORD=$(bashio::config 'mqtt.password')
-MQTT_CLIENT_ID=$(bashio::config 'mqtt.client_id')
-LOG_LEVEL=$(bashio::config 'logging.level')
+with open("/data/options.json", encoding="utf-8") as source:
+    options = json.load(source)
 
-bashio::log.info "Starting Eltako2MQTT Bridge..."
+config = {
+    "eltako": {
+        "poll_interval": 30,
+        "command_feedback_timeout": 120,
+        **options["eltako"],
+    },
+    "mqtt": {"port": 1883, "client_id": "eltako2mqtt", **options["mqtt"]},
+    "logging": {"level": "INFO", **options.get("logging", {})},
+}
+with open("/tmp/eltako2mqtt.yaml", "w", encoding="utf-8") as target:
+    yaml.safe_dump(config, target, allow_unicode=True)
+PY
 
-# Validate required configuration
-if bashio::var.is_empty "${ELTAKO_HOST}"; then
-    bashio::log.fatal "Eltako host is required but not configured!"
-    bashio::exit.nok
-fi
-
-if bashio::var.is_empty "${ELTAKO_PASSWORD}"; then
-    bashio::log.fatal "Eltako password is required but not configured!"
-    bashio::exit.nok
-fi
-
-if bashio::var.is_empty "${MQTT_HOST}"; then
-    bashio::log.fatal "MQTT host is required but not configured!"
-    bashio::exit.nok
-fi
-
-# Create configuration file for the Python script
-cat > /tmp/eltako2mqtt.yaml << EOF
-eltako:
-  host: "${ELTAKO_HOST}"
-  password: "${ELTAKO_PASSWORD}"
-  poll_interval: ${ELTAKO_POLL_INTERVAL}
-
-mqtt:
-  host: "${MQTT_HOST}"
-  port: ${MQTT_PORT}
-  client_id: "${MQTT_CLIENT_ID}"
-
-logging:
-  level: "${LOG_LEVEL}"
-EOF
-
-# Add MQTT credentials if provided
-if ! bashio::var.is_empty "${MQTT_USERNAME}"; then
-    sed -i "/^mqtt:/a\  username: \"${MQTT_USERNAME}\"" /tmp/eltako2mqtt.yaml
-fi
-
-if ! bashio::var.is_empty "${MQTT_PASSWORD}"; then
-    sed -i "/username:/a\  password: \"${MQTT_PASSWORD}\"" /tmp/eltako2mqtt.yaml
-fi
-
-# Set Python environment
-export PYTHONPATH="/usr/lib/python3.11/site-packages"
-if [[ "${LOG_LEVEL}" == "DEBUG" ]]; then
-    export PYTHONUNBUFFERED=1
-fi
-
-bashio::log.info "Eltako Host: ${ELTAKO_HOST}"
-bashio::log.info "MQTT Host: ${MQTT_HOST}:${MQTT_PORT}"
-bashio::log.info "Logging Level: ${LOG_LEVEL}"
-bashio::log.info "Starting Python bridge..."
-
-# Start the Python script
+export PYTHONUNBUFFERED=1
+bashio::log.info "Starting Eltako2MQTT v1.3.0 with command-state feedback"
 exec python3 /eltako2mqtt.py /tmp/eltako2mqtt.yaml
