@@ -1,13 +1,14 @@
 """Release contracts tested against real installed dependencies."""
 
 import asyncio
+from contextlib import nullcontext
 import importlib.metadata
+import io
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -56,27 +57,32 @@ class ProductionContracts(unittest.TestCase):
     def test_launcher_serialization_preserves_credentials_and_optional_defaults(self):
         script = (ROOT / "run.sh").read_text()
         code = script.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
-        with tempfile.TemporaryDirectory() as tmp:
-            options_path = Path(tmp) / "options.json"
-            output_path = Path(tmp) / "bridge.yaml"
-            code = code.replace("/data/options.json", str(options_path))
-            code = code.replace("/tmp/eltako2mqtt.yaml", str(output_path))
-            secret = 'quotes" slash\\ newline\n hash# colon: dollar$ amp& unicodeä'
-            for feedback in ({}, {"command_feedback_timeout": 360}):
-                options = {
-                    "eltako": {"host": "minisafe", "password": secret, **feedback},
-                    "mqtt": {"host": "broker", "username": "user", "password": secret},
-                }
-                options_path.write_text(json.dumps(options))
-                subprocess.run([sys.executable, "-c", code], check=True)
-                config = yaml.safe_load(output_path.read_text())
-                self.assertEqual(config["eltako"]["password"], secret)
-                self.assertEqual(config["mqtt"]["password"], secret)
-                self.assertEqual(config["eltako"]["command_feedback_timeout"],
-                                 feedback.get("command_feedback_timeout", 120))
-                self.assertEqual(config["eltako"]["poll_interval"], 30)
-                self.assertEqual(config["mqtt"]["port"], 1883)
-                self.assertEqual(config["mqtt"]["client_id"], "eltako2mqtt")
+        self.assertIn("umask 077", script)
+        fixture = 'quotes" slash\\ newline\n hash# colon: dollar$ amp& unicodeä'
+        for feedback in ({}, {"command_feedback_timeout": 360}):
+            options = {
+                "eltako": {"host": "minisafe", "password": fixture, **feedback},
+                "mqtt": {"host": "broker", "username": "user", "password": fixture},
+            }
+            source = io.StringIO(json.dumps(options))
+            target = io.StringIO()
+
+            def open_fixture(path, mode="r", **kwargs):
+                self.assertEqual(path, "/data/options.json" if mode == "r" else "/tmp/eltako2mqtt.yaml")
+                return nullcontext(source if mode == "r" else target)
+
+            # Exercise the exact launcher snippet without persisting credential
+            # fixtures to disk or spawning a process with them in its arguments.
+            with patch("builtins.open", side_effect=open_fixture):
+                exec(compile(code, "run.sh:configuration", "exec"), {})
+            config = yaml.safe_load(target.getvalue())
+            self.assertEqual(config["eltako"]["password"], fixture)
+            self.assertEqual(config["mqtt"]["password"], fixture)
+            self.assertEqual(config["eltako"]["command_feedback_timeout"],
+                             feedback.get("command_feedback_timeout", 120))
+            self.assertEqual(config["eltako"]["poll_interval"], 30)
+            self.assertEqual(config["mqtt"]["port"], 1883)
+            self.assertEqual(config["mqtt"]["client_id"], "eltako2mqtt")
 
     def test_real_paho_version2_callbacks_without_network(self):
         bridge = StateFeedbackBridge.__new__(StateFeedbackBridge)
