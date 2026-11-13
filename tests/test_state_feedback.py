@@ -1,5 +1,4 @@
 import asyncio
-import importlib.util
 import json
 import sys
 import types
@@ -8,21 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-try:
-    import paho.mqtt.client
-except ImportError:
-    paho = types.ModuleType('paho')
-    mqtt_pkg = types.ModuleType('paho.mqtt')
-    mqtt = types.ModuleType('paho.mqtt.client')
-    for name in ('Client', 'MQTTMessage', 'ConnectFlags', 'ReasonCode', 'DisconnectFlags'):
-        setattr(mqtt, name, object)
-    mqtt.CallbackAPIVersion = types.SimpleNamespace(VERSION2=2)
-    sys.modules.update({'paho': paho, 'paho.mqtt': mqtt_pkg, 'paho.mqtt.client': mqtt})
-
 sys.path.insert(0, str(Path(__file__).parents[1]))
-spec = importlib.util.spec_from_file_location('state_feedback', Path(__file__).parents[1] / 'state_feedback.py')
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+import state_feedback as module
 
 
 class MQTT:
@@ -42,7 +28,6 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         b = module.StateFeedbackBridge.__new__(module.StateFeedbackBridge)
         b.pending_commands = {}
         b._last_command_time = {}
-        b._recently_commanded_device = None
         b._command_timeout = 120
         b._cover_movements = {}
         b._pending_timeout_tasks = {}

@@ -56,9 +56,11 @@ python3 -m venv .venv
 pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests
+python tools/check_links.py
 bash -n run.sh
 ```
 
 Die Feedback-Tests simulieren HTTP/MQTT und verzögerte Rückmeldungen.
 Produktionsverträge prüfen zusätzlich Startpfad, Docker-COPY-Quellen, Versionskonsistenz, tatsächliche Paho-VERSION2-Callbacks und die Konfigurationsübertragung mit Sonderzeichen.
-Die CI baut ein amd64-Image; die deklarierten weiteren Architekturen und reale Hardware müssen bei Bedarf separat geprüft werden.
+Die CI baut Images für amd64, aarch64, armhf, armv7 und i386 und prüft jeweils den produktiven Importpfad; emulierte Builds ersetzen keine Tests auf echter Hardware.
+Der Offline-Linkchecker prüft lokale Ziele und Überschriftenanker; externe HTTP-Ziele und die veröffentlichte Pages-Ausgabe sind davon getrennte Live-Prüfungen.

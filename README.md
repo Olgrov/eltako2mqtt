@@ -112,3 +112,9 @@ python -m unittest discover -s tests -v
 Python 3.11 ist die Container-Laufzeit; `requirements.txt` ist die gemeinsame Abhängigkeitsquelle für lokale Installation und Docker.
 Enthalten sind `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3`.
 Deklarierte Add-on-Architekturen bleiben aarch64, amd64, armhf, armv7 und i386; ihre Deklaration ist keine Aussage über einen vollständigen Hardwaretest.
+
+## Wartungsstand auf main
+
+Die noch nicht als neues Release veröffentlichten Bereinigungen sind unter [Unreleased](CHANGELOG.md#unreleased) dokumentiert.
+Sie entfernen ungenutzten Altcode und Manifest-Zugriffe, aktualisieren die GitHub Actions und erhalten die Google-Verifikation sowie bestehende Dokumentations-URLs.
+Die Container-Basis bleibt für diesen Schritt unverändert; ihre Modernisierung und die damit verbundene Architekturentscheidung werden separat behandelt.

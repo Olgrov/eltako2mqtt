@@ -7,8 +7,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN \
   apk add --no-cache \
     python3=~3.11 \
-    py3-pip=~23.1 \
-    py3-yaml=~6.0
+    py3-pip=~23.1
 
 COPY requirements.txt /requirements.txt
 RUN pip3 install --no-cache-dir -r /requirements.txt

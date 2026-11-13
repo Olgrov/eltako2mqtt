@@ -15,7 +15,7 @@ Historische Releaseabschnitte sind als Historie zu lesen, nicht als aktuelle Kon
 
 - **[Architektur/API](API.md):** Produktiver Einstieg, Basisklasse, Feedback-Modul, MiniSafe-Protokoll und Tests.
 - **[Feedback-Testplan](TESTING_OPTIMISTIC_STATE.md):** Automatisierte und praktische Regressionen für Produktion und Migration.
-- **[Experimentelle Historie](CHANGELOG_EXPERIMENTAL.md):** Herkunft der Feedback-Implementierung; kein separater produktiver Startpfad.
+- **[Experimentelle Historie](../CHANGELOG.md#125-test3---2026-10-30):** Im Haupt-Changelog zusammengeführt; die alte Dokument-URL bleibt als Verweisseite erhalten.
 
 ## Wichtige Verträge
 

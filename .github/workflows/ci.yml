@@ -2,7 +2,7 @@ name: Release validation
 
 on:
   push:
-    branches: [main, release/v1.3.0]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -10,28 +10,61 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python: ["3.11", "3.14"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-      - run: python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests
+      - run: python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests tools
       - run: bash -n run.sh
+      - run: python tools/check_links.py
   container:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: aarch64
+            platform: linux/arm64
+          - arch: armhf
+            platform: linux/arm/v6
+          - arch: armv7
+            platform: linux/arm/v7
+          - arch: i386
+            platform: linux/386
     steps:
-      - uses: actions/checkout@v4
-      - name: Build production amd64 image
-        run: docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18 -t eltako2mqtt:ci .
-      - name: Verify packaged production entry point
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm,arm64
+      - name: Build production image from build.yaml
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
-          docker run --rm --entrypoint python3 eltako2mqtt:ci -c \
+          BUILD_FROM=$(python -c 'import os, yaml; print(yaml.safe_load(open("build.yaml"))["build_from"][os.environ["ARCH"]])')
+          docker build --platform "$PLATFORM" --build-arg "BUILD_FROM=$BUILD_FROM" -t eltako2mqtt:ci .
+      - name: Verify packaged production entry point
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          docker run --rm --platform "$PLATFORM" --entrypoint python3 eltako2mqtt:ci -c \
             'from eltako2mqtt import EltakoMiniSafe2Bridge; from state_feedback import StateFeedbackBridge; import importlib.metadata as m; assert EltakoMiniSafe2Bridge is StateFeedbackBridge; assert m.version("paho-mqtt") == "2.2.0"'
