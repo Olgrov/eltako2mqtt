@@ -14,7 +14,7 @@ class LinkContracts(unittest.TestCase):
 
     def test_headings_inside_fences_are_not_valid_targets(self):
         self.assertEqual(
-            heading_ids("# Real\n```python\n# Not a heading\n```\n"),
+            heading_ids("# Real\n```html\n# Not a heading\n<a id=\"example-only\"></a>\n```\n"),
             {"real"},
         )
 
