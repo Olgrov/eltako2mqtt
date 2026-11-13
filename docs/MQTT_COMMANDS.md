@@ -1,7 +1,10 @@
-# MQTT-Referenz für Eltako2MQTT v1.3.0
+<a name="mqtt-referenz-für-eltako2mqtt-v130"></a>
+
+# MQTT-Referenz für Eltako2MQTT v1.4.0
 
 Geräte verwenden `eltako/{SID}/...`, wobei `{SID}` die vom MiniSafe gelieferte Gerätekennung ist.
 Befehle werden auf `eltako/{SID}/set` gesendet und dürfen nicht retained sein, damit ein Neustart keine alten Fahrbefehle wiederholt.
+Der Plattformwechsel auf 64 Bit ändert diese MQTT-Verträge und die Discovery-IDs nicht.
 
 ## Rollläden und Jalousien
 

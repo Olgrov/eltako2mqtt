@@ -1,4 +1,6 @@
-# Architektur und Entwicklerreferenz für v1.3.0
+<a name="architektur-und-entwicklerreferenz-für-v130"></a>
+
+# Architektur und Entwicklerreferenz für v1.4.0
 
 Eltako2MQTT ist eine Python-Bridge mit einer asynchronen MiniSafe-HTTP-Seite und einem Paho-MQTT-Netzwerkthread.
 Es gibt keinen eigenen HTTP-Server und keine öffentliche REST-API der Bridge.
@@ -64,9 +66,15 @@ Alle Topicverträge stehen in der [MQTT-Referenz](MQTT_COMMANDS.md).
 
 ## Abhängigkeiten und Kompatibilität
 
-Python 3.11 ist die Container-Laufzeit mit `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3`.
+Die Container-Laufzeit ist Python 3.15 auf Alpine 3.24 aus dem offiziellen Home-Assistant-Python-Image.
+Bei Release-Prüfung ist Python 3.15.2 die neueste stabile Python-Version; Python 3.16 ist noch eine Vorabversion ([Python-Downloads](https://www.python.org/downloads/)).
+Die unveränderten Pins `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3` entsprechen am 13. November 2026 den neuesten stabilen direkten Releases ([aiohttp](https://pypi.org/project/aiohttp/), [Paho](https://pypi.org/project/paho-mqtt/), [PyYAML](https://pypi.org/project/PyYAML/)).
 Paho nutzt weiterhin `CallbackAPIVersion.VERSION2`; sein 2.2.0-Release entfernt Python 3.7/3.8 und ändert bei einigen ungültigen API-Argumenten Ausnahmetypen ([Upstream-Release](https://github.com/eclipse-paho/paho.mqtt.python/releases/tag/v2.2.0)).
 Die Bridge übergibt die unterstützte VERSION2-Enumeration und verwendet keine der betroffenen fehlerhaften Aufrufvarianten.
+
+`build.yaml` verwendet für amd64 und aarch64 denselben Multi-Arch-Tag `ghcr.io/home-assistant/base-python:3.15-alpine3.24`.
+Python/Pip werden nicht mehr als alte Alpine-Pakete nachinstalliert; temporäre Compiler-/Headerpakete ermöglichen nötige Source-Builds und werden danach entfernt.
+`requirements.txt` bleibt die gemeinsame Quelle für direkte Python-Abhängigkeiten; `pip check` prüft die aufgelösten Abhängigkeiten.
 
 ## Lokale Tests und Containerprüfung
 
@@ -78,13 +86,15 @@ python -m unittest discover -s tests -v
 python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests
 python tools/check_links.py
 bash -n run.sh
-docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18 -t eltako2mqtt:local .
+docker build --pull --build-arg BUILD_FROM=ghcr.io/home-assistant/base-python:3.15-alpine3.24 -t eltako2mqtt:local .
 docker run --rm --entrypoint python3 eltako2mqtt:local \
   -c 'from eltako2mqtt import EltakoMiniSafe2Bridge; print(EltakoMiniSafe2Bridge.__name__)'
 ```
 
-Die CI prüft Python 3.11/3.14 sowie lokale Dokumentationslinks einschließlich Ankern und baut Images mit Import-Smoke-Tests für alle fünf deklarierten Architekturen, bei Bedarf unter QEMU.
+Die CI prüft Python 3.14/3.15 sowie lokale Dokumentationslinks einschließlich Ankern und baut amd64-/aarch64-Images auf nativen Ubuntu-26.04-Runnern.
+Im fertigen Image laufen zusätzlich Abhängigkeits- und Unittests sowie `tests/container_smoke.py`: Der Standard-S6-/Bashio-Einstieg startet mit synthetischen Optionen und verbindet sich mit simulierten lokalen MiniSafe-/MQTT-Servern.
+Der Smoke-Test prüft Discovery, Polling, Rollladenbefehle, Dimmer, Schalter, Sensoren und sauberes Herunterfahren; die Testkonfiguration pollt ausschließlich gegen diese Fakes im Ein-Sekunden-Takt.
 Mocks ersetzen keinen MiniSafe-/Home-Assistant-Hardwaretest; der [Testplan](TESTING_OPTIMISTIC_STATE.md) beschreibt die zusätzliche praktische Prüfung.
 
-Die Basis bleibt in diesem Wartungsschritt bewusst auf Alpine 3.18/Python 3.11.
-Eine unterstützte neue Home-Assistant-Basis wird separat behandelt, da aktuelle Upstream-Basisimages nur noch amd64 und aarch64 abdecken und die 32-Bit-Unterstützung nicht stillschweigend entfallen soll ([Upstream-Basisimages](https://github.com/home-assistant/docker-base)).
+Ab v1.4.0 werden ausschließlich amd64 und aarch64 unterstützt, entsprechend den aktuellen [Upstream-Basisimages](https://github.com/home-assistant/docker-base).
+Der v1.3.0-Tag bleibt unverändert der letzte veröffentlichte 32-Bit-Stand; es werden keine neuen armhf-/armv7-/i386-Images für v1.4.0 gebaut.

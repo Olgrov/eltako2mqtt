@@ -2,13 +2,58 @@
 
 Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Eltako2MQTT.
 
-## Noch nicht veröffentlicht - Repository-Wartung
+## Version 1.4.0 - Aktuelle 64-Bit-Plattform und Repository-Wartung (2026-11-13)
 
-Auf `main` werden ersetzte Altimplementierungen, ungenutzte Manifest-Felder und der doppelte YAML-Installationsweg bereinigt.
-GitHub Actions werden aktualisiert, Container-Builds für alle fünf deklarierten Architekturen und lokale Link-/Ankerprüfungen ergänzt; die experimentelle Historie ist im Haupt-Changelog zusammengeführt.
-Die Google-Verifikation und bisherige Dokumentations-URLs bleiben erhalten.
-Die Basis-Migration bleibt auf ausdrücklichen Wunsch separat; Basisimages, Python-Laufzeit, Add-on-Version und Release-Tags werden hier nicht angehoben.
-Details stehen im [Unreleased-Changelog](../CHANGELOG.md#unreleased).
+v1.4.0 modernisiert die Laufzeit und unterstützt ausschließlich `amd64` und `aarch64`.
+Das bisherige [Release v1.3.0](https://github.com/Olgrov/eltako2mqtt/releases/tag/v1.3.0) bleibt unverändert die letzte veröffentlichte Version für `armhf`, `armv7` und `i386`; die alten Release-Tags werden nicht verschoben und es wird keine weiter gepflegte 32-Bit-Linie eröffnet.
+
+### Plattform und geprüfte Abhängigkeiten
+
+| Bestandteil | Stand bei Release-Prüfung |
+| --- | --- |
+| Add-on-Architekturen | amd64, aarch64 |
+| Offizielle Basis | `ghcr.io/home-assistant/base-python:3.15-alpine3.24`, Multi-Arch |
+| Python | 3.15.2, neueste stabile Version; keine 3.16-Vorabversion |
+| Alpine | Stabile 3.24-Linie, aktuelle Pakete durch `apk upgrade` beim Build |
+| pip im Basisimage | 26.3 |
+| aiohttp | 3.14.5, bereits neuestes stabiles direktes Release |
+| paho-mqtt | 2.2.0, bereits neuestes stabiles direktes Release |
+| PyYAML | 6.0.3, bereits neuestes stabiles direktes Release |
+
+Der Stand wurde am 13. November 2026 anhand der [Python-Releases](https://www.python.org/downloads/), der [offiziellen Home-Assistant-Basisimages](https://github.com/home-assistant/docker-base) und von PyPI geprüft ([aiohttp](https://pypi.org/project/aiohttp/), [Paho](https://pypi.org/project/paho-mqtt/), [PyYAML](https://pypi.org/project/PyYAML/)).
+Die drei direkten Pins waren bereits aktuell und werden nicht unnötig geändert; transitive Abhängigkeiten werden frisch aufgelöst und mit `pip check` geprüft.
+Python/Pip kommen aus dem offiziellen Python-Basisimage, nicht mehr aus alten Alpine-Paketen; benötigte Source-Build-Werkzeuge werden anschließend entfernt.
+
+### Upgrade und 32-Bit-Migration
+
+1. Vollständiges Backup erstellen und die Architektur des Home-Assistant-Systems prüfen.
+2. Auf amd64/aarch64 das Add-on auf v1.4.0 aktualisieren beziehungsweise das neue Image bauen.
+3. Startzeile `Eltako2MQTT 1.4.0; poll interval=30s; feedback timeout=120s` und Gerätefunktionen prüfen.
+4. Auf einem 32-Bit-System v1.4.0 nicht erzwingen; zunächst das unveränderte v1.3.0-Image/Backup behalten und auf ein unterstütztes 64-Bit-System migrieren.
+
+Slug, Standard-MQTT-Client-ID, Topics, Discovery-IDs und Konfigurationsoptionen bleiben erhalten.
+Nach einer 64-Bit-Migration müssen Entitäten und Automatisierungen nicht gelöscht werden; Details und Legacy-Quellstand stehen in der [Installationsanleitung](INSTALLATION.md#32-bit-systeme-und-letzter-legacy-stand).
+Die Aufbewahrung von v1.3.0 ist keine Zusage weiterer Sicherheitsupdates für dessen alte Plattform.
+
+<a name="noch-nicht-veröffentlicht---repository-wartung"></a>
+
+### Enthaltene Repository-Wartung
+
+Die seit v1.3.0 vorbereitete Bereinigung ist nun Teil dieses Releases: ersetzte Altimplementierungen, ungenutzte Manifest-Zugriffe und der doppelte YAML-Installationsweg sind entfernt.
+GitHub Actions sind aktuell und SHA-gepinnt; die experimentelle Historie ist im Haupt-Changelog zusammengeführt und historische RSSI-/Rauchmelder-Beispiele sind korrigiert.
+Google-Verifikation, bisherige Dokumentations-URLs und alte Überschriftenanker bleiben erhalten; der Apache-2.0-Lizenztext ist vollständig enthalten.
+Die zwischenzeitlich getrennte Basis-Migration ist mit v1.4.0 und der ausdrücklich beschlossenen 64-Bit-Beschränkung abgeschlossen.
+
+### Validierung und Grenzen
+
+- **Python:** Regressionen auf Python 3.14 und 3.15 sowie Abhängigkeitsprüfung.
+- **Container:** Native Builds und Tests für amd64/aarch64, tatsächliche Laufzeit-/Alpine-Prüfung und Unittests im fertigen Image.
+- **Standardstart:** S6/Bashio-Entrypoint, Konfigurationsübergabe, MQTT-Discovery, Polling, Rollladen-/Dimmer-/Schalterbefehle, Sensoren und Shutdown gegen lokale MiniSafe-/MQTT-Fakes.
+- **Kompatibilität:** CI prüft den unveränderten v1.3.0-Tag und dessen fünf ursprüngliche Architekturen; für v1.4.0 werden nur zwei Architekturen gebaut.
+- **Dokumentation:** Lokale Link-/Ankerprüfung; bisherige Dokumentations-URLs bleiben erhalten.
+- **Grenze:** Kein neuer physischer MiniSafe-/Home-Assistant-Frontend-Test; der Smoke-Test pollt nur seine Fakes im Ein-Sekunden-Takt, echte Geräte weiterhin mit mindestens 30 Sekunden betreiben.
+
+Vollständige Änderungen stehen im [Changelog zu v1.4.0](../CHANGELOG.md#140---2026-11-13).
 
 ## Version 1.3.0 - Produktive Zustandsrückmeldung und MQTT-Update (2026-11-13)
 

@@ -39,7 +39,7 @@ class ProductionContracts(unittest.TestCase):
         dockerfile = (ROOT / "Dockerfile").read_text()
         for source in re.findall(r"^COPY (\S+) ", dockerfile, re.MULTILINE):
             self.assertTrue((ROOT / source).is_file(), source)
-        self.assertIn("pip3 install --no-cache-dir -r /requirements.txt", dockerfile)
+        self.assertIn("python3 -m pip install --no-cache-dir -r /requirements.txt", dockerfile)
         self.assertNotIn("paho-mqtt==", dockerfile)
         self.assertNotIn("py3-yaml", dockerfile)
         self.assertNotIn("experimental", dockerfile.lower())
@@ -47,13 +47,13 @@ class ProductionContracts(unittest.TestCase):
 
     def test_release_identity_versions_and_dependencies(self):
         config = yaml.safe_load((ROOT / "config.yaml").read_text())
-        self.assertEqual(config["version"], "1.3.0")
+        self.assertEqual(config["version"], "1.4.0")
         self.assertEqual(config["slug"], "eltako2mqtt")
         self.assertEqual(config["name"], "Eltako2MQTT")
         self.assertEqual(config["options"]["mqtt"]["client_id"], "eltako2mqtt")
         self.assertEqual(config["options"]["eltako"]["poll_interval"], 30)
         self.assertEqual(config["options"]["eltako"]["command_feedback_timeout"], 120)
-        self.assertIn('io.hass.version="1.3.0"', (ROOT / "Dockerfile").read_text())
+        self.assertIn('io.hass.version="1.4.0"', (ROOT / "Dockerfile").read_text())
         for requirement in (ROOT / "requirements.txt").read_text().splitlines():
             name, version = requirement.split("==")
             self.assertEqual(importlib.metadata.version(name), version)
@@ -76,14 +76,19 @@ class ProductionContracts(unittest.TestCase):
             self.assertNotIn(key, config)
         self.assertEqual(config["services"], ["mqtt:need"])
 
-    def test_architectures_and_base_migration_are_deliberately_unchanged(self):
+    def test_release_platform_contract_is_64_bit_only(self):
         config = yaml.safe_load((ROOT / "config.yaml").read_text())
         build = yaml.safe_load((ROOT / "build.yaml").read_text())["build_from"]
-        expected = {"aarch64", "amd64", "armhf", "armv7", "i386"}
+        expected = {"aarch64", "amd64"}
         self.assertEqual(set(config["arch"]), expected)
         self.assertEqual(set(build), expected)
         for arch, image in build.items():
-            self.assertEqual(image, f"ghcr.io/home-assistant/{arch}-base:3.18")
+            self.assertEqual(image, "ghcr.io/home-assistant/base-python:3.15-alpine3.24")
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        self.assertIn('io.hass.arch="aarch64|amd64"', dockerfile)
+        self.assertNotIn("python3=~", dockerfile)
+        self.assertNotIn("py3-pip", dockerfile)
+        self.assertIn("apk del .build-deps", dockerfile)
         # PyYAML treats the workflow key 'on' as a YAML-1.1 boolean, but jobs
         # are unaffected. Only inspect the relevant job structure here.
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())

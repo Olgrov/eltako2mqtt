@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production entry point for Eltako2MQTT v1.3.0."""
+"""Production entry point for Eltako2MQTT v1.4.0 (64-bit platforms)."""
 
 import asyncio
 import sys

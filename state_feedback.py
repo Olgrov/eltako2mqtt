@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class StateFeedbackBridge(base.EltakoMiniSafe2Bridge):
     def __init__(self, config_file: str):
         super().__init__(config_file)
-        logger.info("Eltako2MQTT 1.3.0; poll interval=%ss; feedback timeout=%ss",
+        logger.info("Eltako2MQTT 1.4.0; poll interval=%ss; feedback timeout=%ss",
                     self.poll_interval, self._command_timeout)
         self.pending_commands: Dict[str, Dict[str, Any]] = {}
         self._last_command_time: Dict[str, float] = {}

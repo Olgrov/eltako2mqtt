@@ -32,5 +32,5 @@ with open("/tmp/eltako2mqtt.yaml", "w", encoding="utf-8") as target:
 PY
 
 export PYTHONUNBUFFERED=1
-bashio::log.info "Starting Eltako2MQTT v1.3.0 with command-state feedback"
+bashio::log.info "Starting Eltako2MQTT v1.4.0 with command-state feedback"
 exec python3 /eltako2mqtt.py /tmp/eltako2mqtt.yaml
