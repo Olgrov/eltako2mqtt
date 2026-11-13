@@ -4,19 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [1.4.0] - 2026-11-13
+
+### Platform migration
+- Support only amd64 and aarch64; remove armhf, armv7 and i386 from the current manifest, build mapping, labels and build matrix.
+- Preserve tag/release v1.3.0 at commit `7773795eea47248e04b7ebe0373b267106f27c68` as the last published 32-bit-compatible version; no maintained 32-bit release line is introduced.
+- Use the official multi-architecture Home Assistant `base-python:3.15-alpine3.24` image, providing Python 3.15.2 and pip 26.3 at release validation.
+- Upgrade stable Alpine packages during the build and remove temporary source-build tools after installing dependencies.
+- Verify direct dependencies against current stable PyPI metadata: aiohttp 3.14.5, paho-mqtt 2.2.0 and PyYAML 6.0.3 are already current and remain pinned.
+- Test Python 3.14/3.15 and native amd64/aarch64 containers on current Ubuntu 26.04 runners; run dependency/unit checks inside the image and a real default-entrypoint smoke test against simulated MiniSafe/MQTT servers.
+- Update manifests, startup messages, platform contracts, installation/migration guidance and release documentation to version 1.4.0.
+- Validate required launcher options from the same local Supervisor JSON that is serialized to YAML, avoiding the current Bashio configuration helper's Supervisor API dependency without requesting extra permissions.
+
 ### Maintenance
 - Remove replaced legacy command/polling implementations and obsolete state tracking from the shared base class; require concrete feedback methods through an abstract interface.
 - Remove unused Supervisor API permissions, config/SSL mounts and the disabled, unused HTTP port from the add-on manifest.
 - Install PyYAML only from `requirements.txt`, without a second Alpine Python-YAML package.
-- Update and pin GitHub Actions, enable Dependabot for Actions, generalize branch filters, and validate container builds for all five declared architectures.
+- Update and pin GitHub Actions, enable Dependabot for Actions and generalize branch filters. The maintenance stage validated five architectures; the v1.4.0 build matrix now contains only the two supported 64-bit targets.
 - Check local documentation links and heading anchors in CI; consolidate experimental history here while retaining the old document URL and headings.
 - Correct historical RSSI/smoke-payload descriptions, add the missing v1.2.3 notes, and clarify the v1.2.4 publication date.
 - Include the complete Apache-2.0 license and preserve the original copyright notice.
 
 ### Deliberately unchanged
-- Google site verification, release tags, add-on version 1.3.0, MQTT topics/IDs, Python dependencies and all five declared architectures.
-- Alpine 3.18/Python 3.11 base-image migration is a separate follow-up, not part of this cleanup.
-- No new release is published by this maintenance change.
+- Google site verification, existing release tags including v1.3.0, MQTT topics/IDs and configuration defaults.
+- Existing 64-bit installations require no entity or configuration migration; rebuild/update the image to obtain the new runtime.
+- The temporary deferral of the base migration during maintenance is superseded by this release.
 
 ## [1.3.0] - 2026-11-13
 

@@ -1,7 +1,19 @@
 # Eltako2MQTT
 
-Eltako2MQTT v1.3.0 verbindet Eltako MiniSafe2 mit Home Assistant über MQTT.
+Eltako2MQTT v1.4.0 verbindet Eltako MiniSafe2 mit Home Assistant über MQTT.
 Das Add-on liest die im MiniSafe eingerichteten Geräte aus und veröffentlicht ihre Discovery-Konfiguration und Zustände.
+
+## Neu in v1.4.0
+
+- **Nur noch 64 Bit:** Unterstützt werden `amd64` und `aarch64`; `armhf`, `armv7` und `i386` entfallen.
+- **Aktuelle Plattform:** Offizielles Home-Assistant-Python-Basisimage mit Python 3.15.2 und Alpine 3.24; aktuelle Pakete der stabilen Alpine-Linie werden beim Build installiert.
+- **Abhängigkeiten geprüft:** `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3` sind am 13. November 2026 bereits die neuesten stabilen direkten Abhängigkeiten und bleiben gepinnt.
+- **Umfassendere CI:** Python 3.14/3.15, native amd64-/aarch64-Builds, Tests im fertigen Image und vollständiger Containerstart gegen simulierte MiniSafe-/MQTT-Schnittstellen.
+- **Bereinigung enthalten:** Ersetzte Altimplementierungen und unnötige Manifest-Rechte entfernt, Dokumentationshistorie korrigiert und zusammengeführt; Google-Verifikation und alte Dokumentations-URLs bleiben erhalten.
+
+**v1.3.0 bleibt die letzte veröffentlichte Version mit 32-Bit-Unterstützung.**
+Tag und [Release v1.3.0](https://github.com/Olgrov/eltako2mqtt/releases/tag/v1.3.0) bleiben unverändert; es wird keine fortlaufend gepflegte 32-Bit-Release-Linie eröffnet.
+Hinweise für bestehende 32-Bit-Systeme stehen in der [Migration](docs/INSTALLATION.md#32-bit-systeme-und-letzter-legacy-stand).
 
 ## Neu in v1.3.0
 
@@ -30,9 +42,9 @@ RSSI wird als MQTT-Wert in Prozent veröffentlicht, nicht als automatisch entdec
 ## Installation und Update
 
 1. In Home Assistant unter Einstellungen → Add-ons → Add-on Store → Repositories das Repository `https://github.com/Olgrov/eltako2mqtt` hinzufügen.
-2. Eltako2MQTT installieren bzw. auf 1.3.0 aktualisieren und die Konfiguration speichern.
+2. Auf einem unterstützten 64-Bit-System Eltako2MQTT installieren bzw. auf 1.4.0 aktualisieren und die Konfiguration speichern.
 3. MQTT-Integration/Broker einrichten und das Add-on starten.
-4. Im Log `Eltako2MQTT 1.3.0; poll interval=30s; feedback timeout=120s` sowie die Discovery-Meldungen prüfen.
+4. Im Log `Eltako2MQTT 1.4.0; poll interval=30s; feedback timeout=120s` sowie die Discovery-Meldungen prüfen.
 
 Bestehende Produktionsinstallationen behalten Slug `eltako2mqtt`, MQTT-Client-ID, Command-Topics und Discovery-IDs.
 Ein eventuell installiertes Test-Add-on muss vor dem Start gestoppt und sein Autostart deaktiviert werden, da beide Varianten dieselben Geräte ansteuern.
@@ -109,12 +121,14 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-Python 3.11 ist die Container-Laufzeit; `requirements.txt` ist die gemeinsame Abhängigkeitsquelle für lokale Installation und Docker.
+Python 3.15 ist die Container-Laufzeit; `requirements.txt` ist die gemeinsame Abhängigkeitsquelle für lokale Installation und Docker.
 Enthalten sind `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3`.
-Deklarierte Add-on-Architekturen bleiben aarch64, amd64, armhf, armv7 und i386; ihre Deklaration ist keine Aussage über einen vollständigen Hardwaretest.
+Die direkten Versionen wurden gegen [aiohttp](https://pypi.org/project/aiohttp/), [Paho](https://pypi.org/project/paho-mqtt/) und [PyYAML](https://pypi.org/project/PyYAML/) geprüft.
+Unterstützte Architekturen sind ausschließlich aarch64 und amd64; automatisierte Tests ersetzen keinen physischen MiniSafe-Test.
 
-## Wartungsstand auf main
+<a name="wartungsstand-auf-main"></a>
 
-Die noch nicht als neues Release veröffentlichten Bereinigungen sind unter [Unreleased](CHANGELOG.md#unreleased) dokumentiert.
-Sie entfernen ungenutzten Altcode und Manifest-Zugriffe, aktualisieren die GitHub Actions und erhalten die Google-Verifikation sowie bestehende Dokumentations-URLs.
-Die Container-Basis bleibt für diesen Schritt unverändert; ihre Modernisierung und die damit verbundene Architekturentscheidung werden separat behandelt.
+## Versions- und Plattformstand
+
+Die bisher separat vorbereitete Bereinigung und die Basis-Migration sind in v1.4.0 zusammengeführt.
+Der [Changelog](CHANGELOG.md#140---2026-11-13) dokumentiert den Umfang; historische Versionsabschnitte beschreiben weiterhin ihre damalige Plattform und nicht den aktuellen Support.

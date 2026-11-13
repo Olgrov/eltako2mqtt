@@ -1,14 +1,11 @@
 name: "Eltako2MQTT"
 description: "Eltako MiniSafe2 to MQTT Bridge for Home Assistant"
-version: "1.3.0"
+version: "1.4.0"
 slug: "eltako2mqtt"
 init: false
 arch:
   - aarch64
   - amd64
-  - armhf
-  - armv7
-  - i386
 startup: application
 boot: auto
 options:

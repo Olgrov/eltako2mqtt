@@ -1,4 +1,6 @@
-# Feedback-Testplan für Eltako2MQTT v1.3.0
+<a name="feedback-testplan-für-eltako2mqtt-v130"></a>
+
+# Feedback-Testplan für Eltako2MQTT v1.4.0
 
 Die zuvor experimentelle Zustandsrückmeldung läuft jetzt im produktiven Add-on.
 Der Dateiname bleibt für vorhandene Verweise erhalten; es gibt keinen separaten Test-Launcher in diesem Release.
@@ -14,7 +16,7 @@ logging:
 ```
 
 Diese Werte in die vorhandene Konfiguration mit Host und Zugangsdaten eintragen.
-Das produktive Add-on neu bauen/aktualisieren, dann starten und die Logzeile `Eltako2MQTT 1.3.0; poll interval=30s; feedback timeout=120s` prüfen.
+Das produktive Add-on auf amd64 oder aarch64 neu bauen/aktualisieren, dann starten und die Logzeile `Eltako2MQTT 1.4.0; poll interval=30s; feedback timeout=120s` prüfen.
 Vorher jedes experimentelle Add-on stoppen und dessen Autostart deaktivieren; unterschiedliche Client-IDs verhindern keine doppelten Gerätebefehle.
 
 ## Praktische Regressionen
@@ -37,7 +39,7 @@ Physische Bewegung und Rückmeldeverzögerung können aus diesen Logs allein nic
 
 ## Debug-Logs
 
-- **Start:** `Eltako2MQTT 1.3.0; poll interval=...; feedback timeout=...`.
+- **Start:** `Eltako2MQTT 1.4.0; poll interval=...; feedback timeout=...`.
 - **Tracking:** `Command tracking ... raw_target=... movement=...`.
 - **Ersatz:** `Command superseded ...`.
 - **Polling:** `GetStates started; interval_since_previous=...` und `GetStates completed ...`.
@@ -62,5 +64,8 @@ bash -n run.sh
 
 Die Feedback-Tests simulieren HTTP/MQTT und verzögerte Rückmeldungen.
 Produktionsverträge prüfen zusätzlich Startpfad, Docker-COPY-Quellen, Versionskonsistenz, tatsächliche Paho-VERSION2-Callbacks und die Konfigurationsübertragung mit Sonderzeichen.
-Die CI baut Images für amd64, aarch64, armhf, armv7 und i386 und prüft jeweils den produktiven Importpfad; emulierte Builds ersetzen keine Tests auf echter Hardware.
+Die CI prüft Python 3.14/3.15 und baut Images für amd64 und aarch64 auf nativen Runnern.
+Im Image werden die Abhängigkeiten, die Unittests und der vollständige Standard-Containerstart mit simuliertem MiniSafe und MQTT getestet; ein Test gegen echte Hardware ist dies nicht.
+Der zusätzliche Container-Smoke-Test verwendet nur gegen seine Loopback-Fakes `poll_interval: 1`; die Empfehlung für echte MiniSafe-Geräte bleibt mindestens 30 Sekunden.
+Ein CI-Vertrag prüft, dass Tag v1.3.0 weiterhin auf dem unveränderten letzten 32-Bit-Release steht; es gibt keine v1.4.0-Builds für armhf, armv7 oder i386.
 Der Offline-Linkchecker prüft lokale Ziele und Überschriftenanker; externe HTTP-Ziele und die veröffentlichte Pages-Ausgabe sind davon getrennte Live-Prüfungen.
