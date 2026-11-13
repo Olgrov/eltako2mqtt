@@ -19,7 +19,8 @@ except ImportError:
     mqtt.CallbackAPIVersion = types.SimpleNamespace(VERSION2=2)
     sys.modules.update({'paho': paho, 'paho.mqtt': mqtt_pkg, 'paho.mqtt.client': mqtt})
 
-spec = importlib.util.spec_from_file_location('experimental', Path(__file__).parents[1] / 'eltako2mqtt_experimental.py')
+sys.path.insert(0, str(Path(__file__).parents[1]))
+spec = importlib.util.spec_from_file_location('state_feedback', Path(__file__).parents[1] / 'state_feedback.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -38,7 +39,7 @@ def blind(pos):
 
 class Tests(unittest.IsolatedAsyncioTestCase):
     def bridge(self):
-        b = module.ExperimentalBridge.__new__(module.ExperimentalBridge)
+        b = module.StateFeedbackBridge.__new__(module.StateFeedbackBridge)
         b.pending_commands = {}
         b._last_command_time = {}
         b._recently_commanded_device = None
@@ -155,6 +156,18 @@ class Tests(unittest.IsolatedAsyncioTestCase):
                 configs[topic] = json.loads(payload)
         self.assertTrue(configs)
         return configs
+
+    async def test_discovery_publishes_each_config_only_once(self):
+        b = self.bridge()
+        devices = [
+            blind(30),
+            {'sid': '02', 'data': 'eltako_switch', 'state': {'state': 'on'}},
+            {'sid': '03', 'data': 'eltako_dimmer', 'state': {'state': 'on', 'level': 50}},
+        ]
+        await self.discovery_configs(b, {device['sid']: device for device in devices})
+        topics = [topic for topic, _, _ in b.mqtt_client.messages if topic.endswith('/config')]
+        self.assertEqual(len(topics), 3)
+        self.assertEqual(len(topics), len(set(topics)))
 
     async def test_discovery_cover_uses_feedback_topics_without_prediction(self):
         b = self.bridge()
@@ -466,10 +479,10 @@ class Tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_payload_validation_rejects_wrong_container_and_bad_entries(self):
         with self.assertLogs(module.logger, level='ERROR'):
-            self.assertIsNone(module.ExperimentalBridge._validate_device_states({'sid': '01'}))
+            self.assertIsNone(module.StateFeedbackBridge._validate_device_states({'sid': '01'}))
         good = blind(0)
         with self.assertLogs(module.logger, level='WARNING'):
-            result = module.ExperimentalBridge._validate_device_states([None, 1, {}, {'sid': '02', 'state': None}, good])
+            result = module.StateFeedbackBridge._validate_device_states([None, 1, {}, {'sid': '02', 'state': None}, good])
         self.assertEqual(result, [good])
 
     async def test_command_success_sends_no_extra_getstates(self):

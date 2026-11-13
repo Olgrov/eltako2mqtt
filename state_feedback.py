@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
-"""Experimental optimistic Home Assistant feedback for Eltako2MQTT."""
+"""Production command feedback and polled-state reconciliation."""
 
 import asyncio
-import importlib.util
 import json
 import logging
 import math
-import sys
 import time
-from pathlib import Path
 from typing import Any, Dict, Optional
 
-spec = importlib.util.spec_from_file_location("eltako2mqtt_base", Path(__file__).with_name("eltako2mqtt.py"))
-base = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(base)
+import bridge_base as base
 logger = logging.getLogger(__name__)
 
 
-class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
+class StateFeedbackBridge(base.EltakoMiniSafe2Bridge):
     def __init__(self, config_file: str):
         super().__init__(config_file)
         self.poll_interval = self.eltako_config.get("poll_interval", 30)
         self._command_timeout = self.eltako_config.get("command_feedback_timeout", 120)
-        logger.info("Experimental bridge 1.2.5-test.3; poll interval=%ss; feedback timeout=%ss",
+        logger.info("Eltako2MQTT 1.3.0; poll interval=%ss; feedback timeout=%ss",
                     self.poll_interval, self._command_timeout)
         self.pending_commands: Dict[str, Dict[str, Any]] = {}
         self._last_command_time: Dict[str, float] = {}
@@ -57,7 +52,8 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
                     else:
                         logger.error(f"Command failed for {sid} ({command}): {text}")
         except Exception as exc:
-            logger.error(f"Error sending command to {sid}: {exc}")
+            # HTTP exceptions can embed the request URL, including XC_PASS.
+            logger.error("Error sending command to %s: %s", sid, type(exc).__name__)
 
     def _track_pending(self, sid: str, command: str, device: Dict[str, Any]):
         now = time.monotonic()
@@ -333,20 +329,23 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
         movement = movement or ("open" if position == 0 else "closed" if position == 100 else "stopped")
         self.mqtt_client.publish(f"eltako/{sid}/movement", movement, retain=False)
 
-    async def publish_discovery(self):
-        await super().publish_discovery()
-        for sid, device in self.devices.items():
-            device_type = device.get("data", "").lower()
-            device_info = {"identifiers": [f"eltako_{sid}"], "name": f"Eltako {sid}", "model": device.get("data", ""), "manufacturer": "Eltako", "via_device": "eltako_minisafe2"}
-            if "blind" in device_type:
-                config = {"name": f"Eltako Blind {sid}", "unique_id": f"eltako_blind_{sid}", "device_class": "blind", "command_topic": f"eltako/{sid}/set", "state_topic": f"eltako/{sid}/movement", "position_topic": f"eltako/{sid}/state", "set_position_topic": f"eltako/{sid}/set", "set_position_template": "{{ position }}", "position_closed": 100, "position_open": 0, "payload_open": "open", "payload_close": "close", "payload_stop": "stop", "state_open": "open", "state_opening": "opening", "state_closed": "closed", "state_closing": "closing", "state_stopped": "stopped", "optimistic": False, "device": device_info}
-                self.mqtt_client.publish(f"homeassistant/cover/eltako_blind_{sid}/config", json.dumps(config), retain=True)
-            elif self.is_switch_device(device_type):
-                config = {"name": f"Eltako Switch {sid}", "unique_id": f"eltako_switch_{sid}", "command_topic": f"eltako/{sid}/set", "state_topic": f"eltako/{sid}/state", "payload_on": "on", "payload_off": "off", "optimistic": True, "device": device_info}
-                self.mqtt_client.publish(f"homeassistant/switch/eltako_switch_{sid}/config", json.dumps(config), retain=True)
-            elif "dimmer" in device_type:
-                config = {"name": f"Eltako Dimmer {sid}", "unique_id": f"eltako_dimmer_{sid}", "command_topic": f"eltako/{sid}/set", "state_topic": f"eltako/{sid}/state", "brightness_command_topic": f"eltako/{sid}/set", "brightness_state_topic": f"eltako/{sid}/brightness", "brightness_scale": 255, "payload_on": "on", "payload_off": "off", "optimistic": True, "device": device_info}
-                self.mqtt_client.publish(f"homeassistant/light/eltako_dimmer_{sid}/config", json.dumps(config), retain=True)
+    def configure_discovery(self, config: Dict[str, Any], device_type: str):
+        # Customize before publishing, not by briefly publishing a legacy config
+        # and then overwriting it on the same topic.
+        device_type = device_type.lower()
+        if "blind" in device_type:
+            config.update({
+                "state_topic": config["command_topic"].rsplit("/", 1)[0] + "/movement",
+                "state_open": "open",
+                "state_opening": "opening",
+                "state_closed": "closed",
+                "state_closing": "closing",
+                "state_stopped": "stopped",
+                "optimistic": False,
+            })
+        elif self.is_switch_device(device_type) or "dimmer" in device_type:
+            config["optimistic"] = True
+        return config
 
     async def poll_devices(self):
         while self.running:
@@ -364,10 +363,3 @@ class ExperimentalBridge(base.EltakoMiniSafe2Bridge):
             except Exception as exc:
                 logger.error(f"Polling error: {exc}")
                 await asyncio.sleep(self.poll_interval)
-
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python3 eltako2mqtt_experimental.py <config_file>")
-        raise SystemExit(1)
-    asyncio.run(ExperimentalBridge(sys.argv[1]).run())

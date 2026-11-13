@@ -1,6 +1,20 @@
 # Experimental changelog
 
-These builds exist only on `test/optimistic-state-feedback`; they are not production releases.
+This is the historical record of `test/optimistic-state-feedback`, not a separate production installation guide.
+The tested implementation was promoted to production in v1.3.0; use [the production test plan](TESTING_OPTIMISTIC_STATE.md) and [release notes](RELEASE_NOTES.md) for current behavior.
+
+## Promotion to 1.3.0 - 2026-11-13
+
+- Rename the feedback module/class to production names and use it through the standard `eltako2mqtt.py` entry point.
+- Restore production identity and remove the experimental launcher; retain MQTT topics and discovery IDs.
+- Forward the optional feedback timeout and document migration without running both add-ons simultaneously.
+
+## 1.2.5-test.3 - 2026-10-30
+
+- Preserve the latest accepted direction across old/opposite feedback until target, replacement, or independent configurable timeout.
+- Keep polled positions unchanged, reject invalid brightness, validate GetStates payloads, and cancel superseded/completed watchdogs.
+- Distinguish accepted Stop plus a position sample from independent motor-stop confirmation.
+- Supersede the short stationary-snapshot grace behavior described for test.2 below.
 
 ## 1.2.5-test.2 — 2026-10-28
 

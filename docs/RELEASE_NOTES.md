@@ -2,6 +2,56 @@
 
 Dieses Dokument enthält detaillierte Release Notes für alle Versionen von Eltako2MQTT.
 
+## Version 1.3.0 - Produktive Zustandsrückmeldung und MQTT-Update (2026-11-13)
+
+Die erprobte Zustandsrückmeldung aus dem Testbranch ist jetzt Bestandteil des produktiven Add-ons.
+Die Veröffentlichung verbindet [Release-PR #24](https://github.com/Olgrov/eltako2mqtt/pull/24) mit dem `paho-mqtt`-Update aus [PR #25](https://github.com/Olgrov/eltako2mqtt/pull/25).
+
+### Funktionen und Korrekturen
+
+- **Produktiver Start:** `run.sh` → `eltako2mqtt.py` → `StateFeedbackBridge`; vollständige Module im Docker-Image, keine experimentelle Identität.
+- **Rollläden:** Sofortige angenommene Bewegungsanzeige nach Befehlsannahme; echte gepollte Position bleibt unverändert. Alte oder gegenläufige Proben beenden den neuesten Befehl nicht vorzeitig.
+- **Bestätigung:** Pending-Tracking je SID, Zielvergleich und Ersatzbefehle. Standardmäßig 120 Sekunden unabhängiger Feedback-Timeout, auch wenn erfolgreiche Polls ausbleiben.
+- **Keine Zusatzlast:** Standard 30 Sekunden Polling, gemeinsame HTTP-Serialisierung, Mindestabstand zwischen GetStates-Starts und keine Abfrage pro Befehl.
+- **Schalter/Dimmer:** Optimistische Home-Assistant-Bedienung und reale MQTT-Statuswerte; ungültige Dimmerhelligkeit setzt den letzten gültigen Wert nicht auf 0.
+- **Paketierung:** Docker installiert aus `requirements.txt`. Version 1.3.0, Name/Slug und Standard-Client-ID sind konsistent produktiv.
+- **Konfiguration:** Optionaler Timeout wird korrekt weitergereicht; Passwörter werden ohne Shell-/YAML-Interpolation übertragen.
+- **Prüfung:** Feedback-Regressionen sowie produktive Startpfad-, Metadaten- und Konfigurationstests; CI für Python 3.11/3.14 und amd64-Container.
+- **Discovery:** Jede Konfiguration wird einmal mit den endgültigen Feedback-Einstellungen publiziert, nicht zunächst mit alten Einstellungen überschrieben.
+- **Dokumentation:** Sämtliche aktuellen Guides einschließlich MQTT-Skalen, tatsächlichen Topics, Upgrade und Testbranch-Migration überarbeitet.
+
+### Abhängigkeiten und Kompatibilität
+
+`paho-mqtt` steigt von 2.1.0 auf 2.2.0; `aiohttp==3.14.5` und `PyYAML==6.0.3` bleiben unverändert.
+Die VERSION2-Callbacks bleiben erhalten.
+Paho 2.2.0 unterstützt Python 3.7/3.8 nicht mehr; das Add-on nutzt Python 3.11 und ist davon nicht betroffen ([Upstream-Release](https://github.com/eclipse-paho/paho.mqtt.python/releases/tag/v2.2.0)).
+
+### Upgrade und Migration
+
+1. Backup und Konfiguration sichern, Add-on Store neu laden und 1.3.0 installieren/bauen.
+2. Vorhandenen `poll_interval` prüfen: Standard ist 30 Sekunden, alte Werte unter 30 werden nicht automatisch überschrieben und sind nicht empfohlen.
+3. Optional `eltako.command_feedback_timeout: 120` ergänzen; an längste Fahrt plus Rückmeldeverzögerung anpassen, Add-on-Bereich 30–900.
+4. Test-Add-on stoppen und Autostart deaktivieren, bevor Produktion startet.
+5. Logzeile `Eltako2MQTT 1.3.0; poll interval=30s; feedback timeout=120s` und Gerätefunktionen prüfen.
+
+Produktiver Slug, Client-ID-Standard, Command-Topics und Discovery-IDs bleiben erhalten.
+Entitäten und Automatisierungen müssen nicht gelöscht oder neu angelegt werden; Discovery wird erneut veröffentlicht.
+Der Cover-Movement-Topic ist zusätzlich, und die Discovery nutzt ihn für die Bewegungsanzeige.
+Der bisherige Rohpositions-Topic bleibt unverändert.
+
+### Wichtige Semantik und Grenzen
+
+- **Positionsskalen:** MQTT-Befehl/Home Assistant 0=geschlossen und 100=offen; MQTT-Rohstatus/MiniSafe 0=offen und 100=geschlossen. Keine zusätzliche Invertierung durch eigene Publisher.
+- **Bewegung:** `opening`/`closing` sind Annahmen, keine gemessenen Motorzustände. Auch eine Positionsprobe nach Stop bestätigt keinen unabhängigen Motorstillstand.
+- **Timeout:** Beendet Tracking und Annahme, nicht die reale Fahrt; kein automatischer Retry und keine künstliche Zielposition.
+- **Polling:** Rückmeldung kann mehrere Polls verspätet eintreffen; keine garantierte Echtzeit-Latenz. Nicht zur Kompensation schneller pollen.
+- **Verfügbarkeit:** Kein Availability-/LWT-Topic; retained Werte können nach einem Ausfall veraltet sein.
+- **Umfang:** Keine FSR14M-Leistungsmessung, keine neuen Gerätetypen und kein Ersatz für zertifizierte Rauchalarmierung.
+- **Validierung:** Automatisierte Tests/Container-Imports ersetzen keine erneute Prüfung mit dem eigenen MiniSafe und Home-Assistant-Frontend.
+
+Details stehen in [Installation](INSTALLATION.md), [MQTT-Referenz](MQTT_COMMANDS.md), [API](API.md) und [Testplan](TESTING_OPTIMISTIC_STATE.md).
+Die folgenden Abschnitte dokumentieren frühere Versionen und können frühere Polling-/Logging-Verträge beschreiben.
+
 ---
 
 ## Version 1.2.5 - aiohttp 3.14.5 Maintenance Update (2026-10-27)
@@ -256,7 +306,7 @@ sensor:
 
 Geplante Features für kommende Releases:
 
-- **v1.3.0**: FSR14M-2x Power Measurement Sensoren
+- **Zukünftig, ohne Versionszusage**: FSR14M-2x Power Measurement Sensoren (nicht in v1.3.0 enthalten)
 - **Zukünftig**: FHK14/F4HK14 Thermostat Support
 - **Zukünftig**: FSDG14, FWZ14, F3Z14D Zähler Support
 - **Zukünftig**: FRGBW14 RGBW Dimmer Support
@@ -268,8 +318,8 @@ Danke an [@M4XXXi](https://github.com/M4XXXi) für das Feature Request [#10](htt
 
 ### 📚 Weitere Informationen
 
-- [CHANGELOG.md](CHANGELOG.md) - Technischer Changelog
-- [README.md](README.md) - Hauptdokumentation
+- [CHANGELOG.md](../CHANGELOG.md) - Technischer Changelog
+- [README.md](../README.md) - Hauptdokumentation
 - [INSTALLATION.md](INSTALLATION.md) - Installationsanleitung
 - [MQTT_COMMANDS.md](MQTT_COMMANDS.md) - MQTT Befehls-Referenz
 - [API.md](API.md) - API Dokumentation für Entwickler
@@ -324,7 +374,7 @@ Version 1.1.0 brachte bedeutende Verbesserungen für Jalousien-Steuerung, defens
 
 ## Ältere Versionen
 
-Für Details zu älteren Versionen (v1.0.5 und früher), siehe [CHANGELOG.md](CHANGELOG.md) oder Git History.
+Für Details zu älteren Versionen (v1.0.5 und früher), siehe [CHANGELOG.md](../CHANGELOG.md) oder Git History.
 
 ---
 
@@ -338,4 +388,4 @@ Bei Fragen, Problemen oder Feature-Requests:
 
 ---
 
-*Dieses Dokument wird mit jedem Release aktualisiert.*
+Dieses Dokument wird mit jedem Release aktualisiert.

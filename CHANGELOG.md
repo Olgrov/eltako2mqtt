@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-11-13
+
+### Added
+- Promote the tested feedback implementation to the production entry point, with stable add-on name, slug, MQTT client ID, topics, and discovery IDs.
+- Publish accepted-command cover movement separately from real polled positions.
+- Track pending commands per device with replacement, target reconciliation, and an independent configurable watchdog (`command_feedback_timeout`, default 120 seconds).
+- Add production packaging, configuration serialization, dependency, and version-contract tests plus Python and amd64 container CI.
+
+### Changed
+- Default polling to 30 seconds; serialize MiniSafe HTTP access and space GetStates starts, including startup. No command-triggered polling or automatic retries.
+- Enable optimistic Home Assistant switches/dimmers with real state feedback; keep covers non-optimistic and preserve raw position semantics.
+- Upgrade `paho-mqtt` from 2.1.0 to 2.2.0 ([PR #25](https://github.com/Olgrov/eltako2mqtt/pull/25)); retain VERSION2 callbacks.
+- Install Docker Python dependencies exclusively from `requirements.txt`; retain aiohttp 3.14.5 and PyYAML 6.0.3.
+- Update every current documentation guide, release notes, migration instructions, topic contracts, and test plan.
+
+### Fixed
+- Package the actual production feedback module instead of referencing a missing `state_feedback.py`.
+- Forward the optional feedback timeout through the add-on launcher and safely serialize credentials without shell interpolation.
+- Preserve the latest accepted cover direction across delayed/opposite feedback; never fabricate target positions.
+- Ignore invalid dimmer brightness instead of publishing a fabricated zero; preserve valid state and RSSI.
+- Avoid logging request URLs from command exceptions because they can contain MiniSafe credentials.
+- Publish each actuator discovery config once with its final feedback settings, rather than briefly sending legacy settings first.
+
+### Upgrade notes
+- Existing production configuration remains usable; omitted feedback timeout defaults to 120 seconds. Existing polling intervals are not silently changed; 30 seconds or more is recommended.
+- Stop any experimental add-on before starting production. Shared command topics/discovery IDs must not have two active bridge instances.
+- Movement labels and timeout expiry are not independent motor-state confirmation. Power measurement is not included in 1.3.0.
+
 ## [1.2.5-test.3] - 2026-10-30
 
 Experimental test branch only; not a production release.

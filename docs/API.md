@@ -1,490 +1,85 @@
-# Eltako2MQTT API Documentation
+# Architektur und Entwicklerreferenz für v1.3.0
 
-## Overview
+Eltako2MQTT ist eine Python-Bridge mit einer asynchronen MiniSafe-HTTP-Seite und einem Paho-MQTT-Netzwerkthread.
+Es gibt keinen eigenen HTTP-Server und keine öffentliche REST-API der Bridge.
 
-This document provides technical information about the Eltako2MQTT bridge architecture and implementation.
+## Produktiver Aufbau
 
----
+- **`eltako2mqtt.py`:** CLI-Einstieg `python3 eltako2mqtt.py CONFIG.yaml`; exportiert `EltakoMiniSafe2Bridge` als Alias der produktiven `StateFeedbackBridge`.
+- **`bridge_base.py`:** Gemeinsame Geräteerkennung, MiniSafe-Befehlsübersetzung, MQTT-VERSION2-Callbacks, Sensorpublikation und Discovery.
+- **`state_feedback.py`:** Produktive Ableitung mit Pending-Tracking, Watchdog, HTTP-Lock, Poll-Scheduling, validierter Helligkeit und Bewegungsanzeige.
+- **`run.sh`:** Prüft Pflichtoptionen und serialisiert Supervisor-JSON sicher nach YAML, inklusive optionalem Timeout.
+- **`requirements.txt`:** Einzige Abhängigkeitsquelle auch für das Docker-Image.
+- **`tests/`:** Unittest-Regressionen und Paketierungs-/Konfigurationsverträge.
 
-## Architecture
+Es wird kein experimentelles Modul importiert oder gestartet.
+Die Basisklasse alleine ist kein alternativer unterstützter Produktionspfad.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Home Assistant                             │
-│         (MQTT Discovery + Home Assistant UI)                 │
-└──────────────────────────────────────────────────────────────┘
-                            ↑↓ MQTT
-┌──────────────────────────────────────────────────────────────┐
-│                  MQTT Broker (Mosquitto)                      │
-│           eltako/{SID}/set  ⟷  eltako/{SID}/state            │
-└──────────────────────────────────────────────────────────────┘
-                            ↑↓ MQTT
-┌──────────────────────────────────────────────────────────────┐
-│                  Eltako2MQTT Bridge                           │
-│              (eltako2mqtt.py with asyncio)                   │
-│                                                               │
-│  - MQTT Client (paho-mqtt 2.1.0)                             │
-│  - HTTP Client (aiohttp)                                     │
-│  - Config Parser (PyYAML)                                    │
-└──────────────────────────────────────────────────────────────┘
-                            ↑↓ HTTP API
-┌──────────────────────────────────────────────────────────────┐
-│              Eltako MiniSafe2 (HTTP API)                      │
-│                                                               │
-│  GET /command?XC_FNC=GetStates        → Device polling       │
-│  GET /command?XC_FNC=SendSC&...       → Device commands      │
-│  {XC_SUC}JSON_DATA                   → Response format       │
-└──────────────────────────────────────────────────────────────┘
-                            ↑↓ EnOcean RF
-┌──────────────────────────────────────────────────────────────┐
-│           EnOcean Devices (Blinds, Switches, etc)            │
-└──────────────────────────────────────────────────────────────┘
-```
+## Datenfluss und Methoden
 
----
+`on_mqtt_message()` plant Coroutinen threadsicher auf dem Bridge-Eventloop ein.
+`handle_device_command(sid, command)` validiert und übersetzt einen Befehl, wartet auf den gemeinsamen Lock und sendet genau einen `SendSC`-Request.
+Nur HTTP 200 mit `{XC_SUC}` gilt als Befehlsannahme und erzeugt Pending-Tracking.
 
-## Core Classes
+- **`_track_pending()`:** Speichert Befehl, erwartete Teilzustände, Zeitstempel und gegebenenfalls Bewegungsannahme pro SID.
+- **`_pending_matches()`:** Vergleicht gepollte Zustände; numerische Werte müssen endlich, im Bereich 0–100 und höchstens einen Prozentpunkt vom Ziel entfernt sein.
+- **`_reconcile_pending()`:** Löst passende oder abgelaufene Befehle auf und leitet die Bewegungsanzeige ab, bevor der neue echte Zustand gecacht wird.
+- **`_pending_watchdog()`:** Beendet die Annahme auch bei ausbleibenden erfolgreichen Polls; alte Timer dürfen Ersatzbefehle nicht löschen.
+- **`_clear_pending()`:** Entfernt Tracking und beendet den zugehörigen Timer.
+- **`fetch_device_states()`:** Serialisiert Requests und hält mindestens `poll_interval` zwischen `GetStates`-Starts ein, auch beim Start.
+- **`_validate_device_states()`:** Erwartet eine Liste; verwirft fehlerhafte Einträge ohne SID/String-Typ oder mit ungültigem State-Container.
+- **`publish_device_state()`:** Veröffentlicht reale Rohzustände; ungültige Coverpositionen und Dimmerhelligkeiten werden nicht durch erfundene Werte ersetzt.
+- **`publish_discovery()`:** Konfiguriert Cover mit Bewegungs-/Positions-Topics, Schalter/Dimmer optimistisch und erhält Sensor-Discovery.
 
-### EltakoMiniSafe2Bridge
+Der Lock bleibt beim Warten auf den nächsten Polltermin frei.
+Ein Befehl löst keinen zusätzlichen `GetStates`-Request aus; lange aktive HTTP-Requests können Befehle jedoch verzögern.
+Timeouts werden beim Shutdown abgebrochen und eingesammelt.
 
-Main bridge class handling all operations.
+## MiniSafe-Protokoll
 
-#### Initialization
-
-```python
-def __init__(self, config_file: str):
-    self.config          # Loaded YAML configuration
-    self.mqtt_client     # paho-mqtt client instance
-    self.session         # aiohttp session
-    self.devices         # Dict[sid: str, device: Dict]
-    self.loop            # asyncio event loop
-    self.mqtt_connected  # Connection state flag (v1.1.0)
-    self._recently_commanded_device  # Smart logging (v1.1.0)
+```text
+http://HOST/command?XC_FNC=GetStates&XC_PASS=URL_ENCODED_PASSWORD
+http://HOST/command?XC_FNC=SendSC&type=ENOCEAN&address=ADR&data=COMMAND&XC_PASS=URL_ENCODED_PASSWORD
 ```
 
-#### Key Methods
-
-**Connection Methods:**
-- `setup_mqtt()` - Initialize and connect to MQTT broker
-- `run()` - Main async loop
-
-**Device Discovery:**
-- `fetch_device_states()` - Poll MiniSafe2 for device states
-- `publish_discovery()` - Send MQTT Discovery messages
-
-**Command Processing:**
-- `on_mqtt_message()` - Handle incoming MQTT messages
-- `handle_device_command()` - Send command to MiniSafe2
-- `build_command_url()` - Build HTTP API URL for command
-- `update_device_state_immediate()` - Update local device state
-
-**State Publishing:**
-- `publish_device_state()` - Publish state to MQTT
-- `poll_devices()` - Main polling loop
-
-**Logging (v1.1.0):**
-- `_is_recently_commanded()` - Check if device was recently commanded
-- `_log_device_feedback()` - Smart feedback logging
-
----
-
-## Data Structures
-
-### Device Object
-
-```python
-{
-    "sid": "01",                      # Short ID (device identifier)
-    "data": "eltako_blind",            # Device type
-    "adr": "0x12345678",               # EnOcean address
-    "state": {
-        # For blinds:
-        "pos": 0,                      # Position 0-100
-        "sync": true,                  # Sync status
-        "rv": 1.5,                     # Reserve voltage
-        "rt": 1000,                    # Response time (ms)
-        
-        # For switches:
-        "state": "on",                 # State: on/off
-        
-        # For dimmers:
-        "state": "on",                 # State: on/off
-        "level": 100,                  # Level 0-100
-        
-        # For weather:
-        "temperature": 22.5,           # Temperature °C
-        "wind": 3.2,                   # Wind m/s
-        "rain_state": false,           # Rain detected
-        "illumination": 5000,          # Lux
-        "s1": 5000,                    # East illumination
-        "s2": 5200,                    # South illumination
-        "s3": 4800,                    # West illumination
-        
-        # All devices:
-        "rssiPercentage": 85           # Signal strength %
-    }
-}
-```
-
-### Configuration Object
-
-```yaml
-eltako:
-  host: str              # MiniSafe2 IP address
-  password: str          # HTTP API password
-  poll_interval: int     # Polling interval in seconds
-
-mqtt:
-  host: str              # MQTT broker hostname
-  port: int              # MQTT broker port
-  username: str (opt)    # MQTT username
-  password: str (opt)    # MQTT password
-  client_id: str (opt)   # MQTT client ID
-
-logging:
-  level: str (opt)       # Log level: DEBUG, INFO, WARNING, ERROR
-```
-
----
-
-## MiniSafe2 HTTP API
-
-### GetStates Endpoint
-
-**Request:**
-```
-GET /command?XC_FNC=GetStates&XC_PASS={password}
-```
-
-**Response:**
-```
-{XC_SUC}{"devices":[{"sid":"01","data":"eltako_blind",...}]}
-```
-
-### SendSC (Send Command) Endpoint
-
-**Request:**
-```
-GET /command?XC_FNC=SendSC&type=ENOCEAN&address={address}&data={command}&XC_PASS={password}
-```
-
-**Parameters:**
-- `address` - EnOcean device address (URL-encoded)
-- `data` - Command to send (e.g., "on", "off", "dimTo50")
-- `XC_PASS` - API password (URL-encoded)
-
-**Response on Success:**
-```
-{XC_SUC}
-```
-
-**Response on Error:**
-```
-{XC_ERR}Error message
-```
-
----
-
-## MQTT Topics & Payloads
-
-### Subscribed Topics
-
-```
-eltako/+/set          # Device commands (incoming)
-homeassistant/status  # HA startup notification
-```
-
-### Published Topics
-
-**Device State:**
-```
-eltako/{SID}/state        # Current state/position
-eltako/{SID}/brightness   # Brightness (dimmers only)
-eltako/{SID}/rssi         # Signal strength
-```
-
-**Discovery:**
-```
-homeassistant/blind/eltako_blind_{SID}/config
-homeassistant/switch/eltako_switch_{SID}/config
-homeassistant/light/eltako_dimmer_{SID}/config
-homeassistant/sensor/eltako_weather_{METRIC}_{SID}/config
-```
-
-### Discovery Payload Example
-
-```json
-{
-  "name": "Eltako Blind 01",
-  "unique_id": "eltako_blind_01",
-  "device_class": "blind",
-  "command_topic": "eltako/01/set",
-  "position_topic": "eltako/01/state",
-  "set_position_topic": "eltako/01/set",
-  "position_closed": 100,
-  "position_open": 0,
-  "payload_open": "open",
-  "payload_close": "close",
-  "payload_stop": "stop",
-  "device": {
-    "identifiers": ["eltako_01"],
-    "name": "Eltako 01",
-    "model": "eltako_blind",
-    "manufacturer": "Eltako"
-  }
-}
-```
-
----
-
-## Async Flow
-
-### Main Event Loop
-
-```python
-async def run():
-    # 1. Setup MQTT
-    await setup_mqtt()
-    
-    # 2. Fetch initial device states
-    devices = await fetch_device_states()
-    
-    # 3. Publish MQTT Discovery
-    await publish_discovery()
-    
-    # 4. Publish initial states
-    for sid, device in devices.items():
-        await publish_device_state(sid, device)
-    
-    # 5. Start polling loop
-    await poll_devices()  # Infinite loop
-```
-
-### Polling Loop
-
-```python
-async def poll_devices():
-    while running:
-        devices = await fetch_device_states()
-        for sid, device in devices.items():
-            # Update cached state
-            self.devices[sid] = device
-            
-            # Publish state
-            await publish_device_state(sid, device)
-            
-            # Log feedback if recently commanded (v1.1.0)
-            self._log_device_feedback(sid, device)
-        
-        # Wait for next poll
-        await asyncio.sleep(poll_interval)
-```
-
-### Command Processing
-
-```python
-def on_mqtt_message(client, userdata, msg):
-    topic = msg.topic  # e.g., "eltako/01/set"
-    payload = msg.payload.decode()  # e.g., "open"
-    
-    sid = topic.split("/")[1]  # Extract SID
-    
-    # Track command timing for logging
-    if is_numeric(payload):
-        _last_dim_command_time[sid] = time.monotonic()
-        _recently_commanded_device = sid
-    
-    # Process command async
-    asyncio.run_coroutine_threadsafe(
-        handle_device_command(sid, payload),
-        event_loop
-    )
-```
-
----
-
-## Error Handling
-
-### Connection Errors
-
-```python
-try:
-    async with session.get(url) as response:
-        if response.status == 200:
-            # Success
-        else:
-            logger.error(f"HTTP error {response.status}")
-except Exception as e:
-    logger.error(f"Connection error: {e}")
-```
-
-### Validation Errors
-
-```python
-# Brightness validation (v1.1.0)
-if level is None or not is_numeric(level):
-    logger.warning(f"Invalid brightness: {level}")
-    level = 0  # Graceful fallback
-
-# Position validation
-if position < 0 or position > 100:
-    logger.warning(f"Position out of range: {position}")
-    return None
-```
-
----
-
-## Logging System (v1.1.0)
-
-### Configuration
-
-```yaml
-logging:
-  level: DEBUG|INFO|WARNING|ERROR
-```
-
-### Smart Filtering
-
-```python
-def _log_device_feedback(self, sid, device):
-    # Only log if:
-    # 1. MQTT is connected
-    # 2. Device was recently commanded
-    # 3. Within timeout window (poll_interval + 60s)
-    
-    if not mqtt_connected:
-        return
-    
-    if not _is_recently_commanded(sid):
-        return
-    
-    logger.debug(f"Hardware feedback: {device_type} {sid}...")
-```
-
-### Log Levels
-
-- `DEBUG` - Everything, including hardware feedback (filtered by above)
-- `INFO` - Important events, connections
-- `WARNING` - Warnings, invalid inputs
-- `ERROR` - Errors, fatal issues
-
----
-
-## Performance Considerations
-
-### Polling Interval
-
-Default: **5 seconds**
-
-**Trade-offs:**
-- Faster polling: More responsive but more network traffic
-- Slower polling: Less traffic but slower state updates
-
-**Recommendation:**
-- 5-10 seconds: Most responsive
-- 15-30 seconds: Good balance
-- 60+ seconds: Minimal traffic, slower updates
-
-### Memory Usage
-
-- Device cache: ~1KB per device
-- Command tracking: ~100 bytes per recently-commanded device
-- MQTT connection: ~50KB for paho-mqtt client
-- HTTP session: ~20KB for aiohttp session
-
-**Typical:** 500KB-2MB for 10-50 devices
-
-### CPU Usage
-
-- Polling loop: ~1-5% (idle waiting)
-- Command processing: <1% per command
-- MQTT message handling: <1% per message
-
----
-
-## Dependencies & Versions
-
-### Core Dependencies
-
-```
-paho-mqtt==2.1.0       # MQTT client (VERSION2 API)
-aiohttp==3.13.3+       # Async HTTP
-PyYAML==6.0.3+         # Config parsing
-```
-
-### Python Version
-
-- Minimum: Python 3.11
-- Tested: Python 3.11.8
-
-### Asyncio
-
-- Uses modern asyncio patterns
-- Thread-safe MQTT callbacks via `run_coroutine_threadsafe()`
-- No blocking operations in event loop
-
----
-
-## Extending the Bridge
-
-### Adding Support for New Device Types
-
-1. **Identify device type:** Check MiniSafe2 logs for "data" field
-2. **Add to command handler:**
-   ```python
-   elif 'new_device' in device_type.lower():
-       # Handle command
-       cmd = parse_command(command)
-       return self._build_url(address, cmd)
-   ```
-3. **Add to state publisher:**
-   ```python
-   elif 'new_device' in device_type.lower():
-       # Publish state
-       self.mqtt_client.publish(f"{base}/new_state", value)
-   ```
-4. **Add to discovery:**
-   ```python
-   elif 'new_device' in device_type.lower():
-       config = {...device configuration...}
-       topic = f"homeassistant/sensor/eltako_newdevice_{sid}/config"
-       self.mqtt_client.publish(topic, json.dumps(config))
-   ```
-
----
-
-## Troubleshooting Guide
-
-### Enable Debug Logging
-
-```yaml
-logging:
-  level: DEBUG
-```
-
-### Monitor MQTT Messages
+`GetStates` erwartet `{XC_SUC}` gefolgt von einer JSON-Geräteliste.
+Geräte enthalten unter anderem `sid`, `data`, `adr` und `state`; je nach Gerät etwa `pos`, `state`, `level`, `rssiPercentage`, Wetter- oder Rauchwerte.
+Diese Schnittstelle ist MiniSafe-spezifisch und nicht die API eines Servers in diesem Add-on.
+
+Coverbefehle werden genau einmal invertiert: MQTT 0=geschlossen → `moveTo100`, MQTT 100=offen → `moveTo0`.
+Der publizierte Coverstatus bleibt dagegen unverändert in der MiniSafe-Skala 0=offen, 100=geschlossen.
+Dimmer-Numerik ist immer 0–255 und wird auf 0–100 umgerechnet; 0 sendet `off`.
+Alle Topicverträge stehen in der [MQTT-Referenz](MQTT_COMMANDS.md).
+
+## Semantik und Grenzen
+
+- **Befehlsannahme:** `{XC_SUC}` bestätigt nicht, dass das physische Gerät bereits den Zielzustand erreicht hat.
+- **Coverbewegung:** Kann aus einem angenommenen Befehl oder Positionsdifferenzen stammen; kein Motor-Running-Sensor.
+- **Stop:** Eine gültige Probe nach Stop beendet Tracking, wird aber ausdrücklich nicht als unabhängige Motorbestätigung geloggt.
+- **Timeout:** Standard 120 Sekunden, kein Retry, keine Fahrtabschaltung und keine erfundene Zielposition.
+- **Optimismus:** Schalter/Dimmer nutzen die Home-Assistant-UI; Status-Topics bleiben gepollt. Cover nutzen `optimistic: false`.
+- **Helligkeit:** Nicht-endliche, boolesche, fehlende oder außerhalb 0–100 liegende Level werden ignoriert; Warnungen werden pro Fehlerphase/SID begrenzt.
+- **Sicherheit:** HTTP ohne TLS, MQTT ohne TLS-Konfiguration, kein Availability-/LWT-Vertrag. Keine MiniSafe-URLs mit Passwort in Fehlerberichte übernehmen.
+
+## Abhängigkeiten und Kompatibilität
+
+Python 3.11 ist die Container-Laufzeit mit `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3`.
+Paho nutzt weiterhin `CallbackAPIVersion.VERSION2`; sein 2.2.0-Release entfernt Python 3.7/3.8 und ändert bei einigen ungültigen API-Argumenten Ausnahmetypen ([Upstream-Release](https://github.com/eclipse-paho/paho.mqtt.python/releases/tag/v2.2.0)).
+Die Bridge übergibt die unterstützte VERSION2-Enumeration und verwendet keine der betroffenen fehlerhaften Aufrufvarianten.
+
+## Lokale Tests und Containerprüfung
 
 ```bash
-mosquitto_sub -v -t "eltako/#"
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+python -m unittest discover -s tests -v
+python -m compileall -q eltako2mqtt.py bridge_base.py state_feedback.py tests
+bash -n run.sh
+docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18 -t eltako2mqtt:local .
+docker run --rm --entrypoint python3 eltako2mqtt:local \
+  -c 'from eltako2mqtt import EltakoMiniSafe2Bridge; print(EltakoMiniSafe2Bridge.__name__)'
 ```
 
-### Test MiniSafe2 Connectivity
-
-```bash
-curl "http://192.168.1.100/command?XC_FNC=GetStates&XC_PASS=password"
-```
-
-### Check Device Discovery
-
-Look for in logs:
-```
-Publishing device with sid [01]
-Published discovery for blind: homeassistant/cover/...
-```
-
----
-
-For more information, see:
-- [README.md](README.md)
-- [INSTALLATION.md](INSTALLATION.md)
-- [MQTT_COMMANDS.md](MQTT_COMMANDS.md)
+Die CI prüft Python 3.11/3.14 und baut ein amd64-Image mit Import-Smoke-Test.
+Mocks ersetzen keinen MiniSafe-/Home-Assistant-Hardwaretest; der [Testplan](TESTING_OPTIMISTIC_STATE.md) beschreibt die zusätzliche praktische Prüfung.
