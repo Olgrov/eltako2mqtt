@@ -43,7 +43,7 @@ Die Aufbewahrung von v1.3.0 ist keine Zusage weiterer Sicherheitsupdates für de
 
 Die seit v1.3.0 vorbereitete Bereinigung ist nun Teil dieses Releases: ersetzte Altimplementierungen, ungenutzte Manifest-Zugriffe und der doppelte YAML-Installationsweg sind entfernt.
 GitHub Actions sind aktuell und SHA-gepinnt; die experimentelle Historie ist im Haupt-Changelog zusammengeführt und historische RSSI-/Rauchmelder-Beispiele sind korrigiert.
-Google-Verifikation, bisherige Dokumentations-URLs und alte Überschriftenanker bleiben erhalten; der Apache-2.0-Lizenztext ist vollständig enthalten.
+Bisherige Dokumentations-URLs und alte Überschriftenanker bleiben erhalten; der Apache-2.0-Lizenztext ist vollständig enthalten.
 Die zwischenzeitlich getrennte Basis-Migration ist mit v1.4.0 und der ausdrücklich beschlossenen 64-Bit-Beschränkung abgeschlossen.
 
 ### Validierung und Grenzen
