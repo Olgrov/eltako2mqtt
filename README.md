@@ -9,7 +9,7 @@ Das Add-on liest die im MiniSafe eingerichteten Geräte aus und veröffentlicht 
 - **Aktuelle Plattform:** Offizielles Home-Assistant-Python-Basisimage mit Python 3.15.2 und Alpine 3.24; aktuelle Pakete der stabilen Alpine-Linie werden beim Build installiert.
 - **Abhängigkeiten geprüft:** `aiohttp==3.14.5`, `paho-mqtt==2.2.0` und `PyYAML==6.0.3` sind am 13. November 2026 bereits die neuesten stabilen direkten Abhängigkeiten und bleiben gepinnt.
 - **Umfassendere CI:** Python 3.14/3.15, native amd64-/aarch64-Builds, Tests im fertigen Image und vollständiger Containerstart gegen simulierte MiniSafe-/MQTT-Schnittstellen.
-- **Bereinigung enthalten:** Ersetzte Altimplementierungen und unnötige Manifest-Rechte entfernt, Dokumentationshistorie korrigiert und zusammengeführt; Google-Verifikation und alte Dokumentations-URLs bleiben erhalten.
+- **Bereinigung enthalten:** Ersetzte Altimplementierungen und unnötige Manifest-Rechte entfernt, Dokumentationshistorie korrigiert und zusammengeführt; alte Dokumentations-URLs bleiben erhalten.
 
 **v1.3.0 bleibt die letzte veröffentlichte Version mit 32-Bit-Unterstützung.**
 Tag und [Release v1.3.0](https://github.com/Olgrov/eltako2mqtt/releases/tag/v1.3.0) bleiben unverändert; es wird keine fortlaufend gepflegte 32-Bit-Release-Linie eröffnet.
