@@ -1,15 +1,10 @@
 #!/usr/bin/with-contenv bashio
 set -euo pipefail
 
-for key in eltako.host eltako.password mqtt.host; do
-    if ! bashio::config.has_value "${key}"; then
-        bashio::log.fatal "Required option ${key} is not configured"
-        bashio::exit.nok
-    fi
-done
-
 # Read Supervisor JSON directly: YAML interpolation/sed can corrupt passwords
 # containing quotes, backslashes, newlines, or shell metacharacters.
+# Validate this same local input rather than asking Bashio for Supervisor API
+# options; startup does not require Supervisor API access.
 umask 077
 python3 - <<'PY'
 import json
@@ -17,6 +12,11 @@ import yaml
 
 with open("/data/options.json", encoding="utf-8") as source:
     options = json.load(source)
+
+for section, key in (("eltako", "host"), ("eltako", "password"), ("mqtt", "host")):
+    values = options.get(section) if isinstance(options, dict) else None
+    if not isinstance(values, dict) or values.get(key) in (None, ""):
+        raise SystemExit(f"Required option {section}.{key} is not configured")
 
 config = {
     "eltako": {

@@ -23,6 +23,8 @@ Das bisherige [Release v1.3.0](https://github.com/Olgrov/eltako2mqtt/releases/ta
 Der Stand wurde am 13. November 2026 anhand der [Python-Releases](https://www.python.org/downloads/), der [offiziellen Home-Assistant-Basisimages](https://github.com/home-assistant/docker-base) und von PyPI geprüft ([aiohttp](https://pypi.org/project/aiohttp/), [Paho](https://pypi.org/project/paho-mqtt/), [PyYAML](https://pypi.org/project/PyYAML/)).
 Die drei direkten Pins waren bereits aktuell und werden nicht unnötig geändert; transitive Abhängigkeiten werden frisch aufgelöst und mit `pip check` geprüft.
 Python/Pip kommen aus dem offiziellen Python-Basisimage, nicht mehr aus alten Alpine-Paketen; benötigte Source-Build-Werkzeuge werden anschließend entfernt.
+Der Launcher validiert Pflichtfelder direkt aus der lokalen `options.json`, ohne dafür auf die inzwischen API-basierte Bashio-Konfigurationsabfrage zurückzugreifen.
+Zusätzliche Supervisor-API-Berechtigungen werden nicht benötigt.
 
 ### Upgrade und 32-Bit-Migration
 

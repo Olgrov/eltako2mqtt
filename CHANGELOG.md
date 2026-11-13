@@ -16,6 +16,7 @@ No unreleased changes.
 - Verify direct dependencies against current stable PyPI metadata: aiohttp 3.14.5, paho-mqtt 2.2.0 and PyYAML 6.0.3 are already current and remain pinned.
 - Test Python 3.14/3.15 and native amd64/aarch64 containers on current Ubuntu 26.04 runners; run dependency/unit checks inside the image and a real default-entrypoint smoke test against simulated MiniSafe/MQTT servers.
 - Update manifests, startup messages, platform contracts, installation/migration guidance and release documentation to version 1.4.0.
+- Validate required launcher options from the same local Supervisor JSON that is serialized to YAML, avoiding the current Bashio configuration helper's Supervisor API dependency without requesting extra permissions.
 
 ### Maintenance
 - Remove replaced legacy command/polling implementations and obsolete state tracking from the shared base class; require concrete feedback methods through an abstract interface.

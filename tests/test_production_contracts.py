@@ -166,6 +166,27 @@ class ProductionContracts(unittest.TestCase):
                                   mqtt.ReasonCode(mqtt.PacketTypes.DISCONNECT, "Normal disconnection"), None)
         self.assertFalse(bridge.mqtt_connected)
 
+    def test_launcher_validates_local_required_options_without_supervisor_api(self):
+        script = (ROOT / "run.sh").read_text()
+        self.assertNotIn("bashio::config", script)
+        code = script.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
+        cases = (
+            ({}, "eltako.host"),
+            ({"eltako": None}, "eltako.host"),
+            ({"eltako": {"host": "minisafe"}}, "eltako.password"),
+            ({"eltako": {"host": "minisafe", "password": ""}}, "eltako.password"),
+            ({"eltako": {"host": "minisafe", "password": None}}, "eltako.password"),
+            ({"eltako": {"host": "minisafe", "password": "fixture"}}, "mqtt.host"),
+            ({"eltako": {"host": "minisafe", "password": "fixture"}, "mqtt": None}, "mqtt.host"),
+        )
+        for options, missing in cases:
+            with self.subTest(missing=missing, options=options):
+                source = io.StringIO(json.dumps(options))
+                with patch("builtins.open", return_value=nullcontext(source)) as opened:
+                    with self.assertRaisesRegex(SystemExit, f"Required option {re.escape(missing)} is not configured"):
+                        exec(compile(code, "run.sh:configuration", "exec"), {})
+                opened.assert_called_once_with("/data/options.json", encoding="utf-8")
+
     def test_documentation_relative_links_resolve(self):
         checked, problems = check_documents(ROOT)
         self.assertGreater(checked, 0)
