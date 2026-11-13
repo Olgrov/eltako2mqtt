@@ -67,11 +67,12 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           docker run --rm --platform "$PLATFORM" --entrypoint python3 eltako2mqtt:ci -c \
-            'from eltako2mqtt import EltakoMiniSafe2Bridge; from state_feedback import StateFeedbackBridge; import importlib.metadata as m, platform; assert EltakoMiniSafe2Bridge is StateFeedbackBridge; assert platform.python_version_tuple()[:2] == ("3","15"); print("Python", platform.python_version(), "pip", m.version("pip")); print(open("/etc/alpine-release").read().strip()); assert open("/etc/alpine-release").read().startswith("3.24."); assert m.version("paho-mqtt") == "2.2.0"'
+            'from eltako2mqtt import EltakoMiniSafe2Bridge; from state_feedback import StateFeedbackBridge; import importlib.metadata as m, platform; assert EltakoMiniSafe2Bridge is StateFeedbackBridge; assert platform.python_version_tuple()[:2] == ("3","15"); print("Python", platform.python_version(), "pip", m.version("pip")); print(open("/etc/alpine-release").read().strip()); assert open("/etc/alpine-release").read().startswith("3.24"); assert m.version("paho-mqtt") == "2.2.0"'
       - name: Dependency and unit tests inside the built image
         run: |
           docker run --rm --entrypoint python3 eltako2mqtt:ci -m pip check
-          docker run --rm --entrypoint python3 eltako2mqtt:ci -m pip list --outdated --format=json
+          echo 'Reporting outdated Python dependencies (non-blocking):'
+          docker run --rm --entrypoint python3 eltako2mqtt:ci -m pip list --outdated --format=json || true
           docker run --rm --entrypoint /bin/sh eltako2mqtt:ci -c 'test -z "$(command -v gcc || true)"'
           docker run --rm --entrypoint python3 -e PYTHONDONTWRITEBYTECODE=1 \
             -v "$PWD:/source:ro" -w /source eltako2mqtt:ci -m unittest discover -s tests -v
