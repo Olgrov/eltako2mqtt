@@ -28,7 +28,7 @@ No unreleased changes.
 - Include the complete Apache-2.0 license and preserve the original copyright notice.
 
 ### Deliberately unchanged
-- Google site verification, existing release tags including v1.3.0, MQTT topics/IDs and configuration defaults.
+- existing release tags including v1.3.0, MQTT topics/IDs and configuration defaults.
 - Existing 64-bit installations require no entity or configuration migration; rebuild/update the image to obtain the new runtime.
 - The temporary deferral of the base migration during maintenance is superseded by this release.
 
