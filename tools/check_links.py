@@ -31,7 +31,7 @@ def strip_code_fences(text):
 
 def heading_ids(text):
     """Return GitHub-style automatic IDs, including duplicate-heading suffixes."""
-    ids = set(re.findall(r'\bid=["\']([^"\']+)["\']', text))
+    ids = set(re.findall(r'\b(?:id|name)=["\']([^"\']+)["\']', text))
     seen = Counter()
     lines = strip_code_fences(text)
     for index, line in enumerate(lines):

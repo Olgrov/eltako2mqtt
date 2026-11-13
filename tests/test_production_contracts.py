@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 from eltako2mqtt import EltakoMiniSafe2Bridge
 from state_feedback import StateFeedbackBridge
 from bridge_base import EltakoMiniSafe2Bridge as BridgeBase
-from tools.check_links import check_documents
+from tools.check_links import check_documents, heading_ids
 
 
 class ProductionContracts(unittest.TestCase):
@@ -165,3 +165,19 @@ class ProductionContracts(unittest.TestCase):
         checked, problems = check_documents(ROOT)
         self.assertGreater(checked, 0)
         self.assertEqual(problems, [])
+
+    def test_legacy_documentation_urls_and_date_anchors_remain_available(self):
+        expected = {
+            "CHANGELOG.md": {"124---2026-08-02"},
+            "docs/RELEASE_NOTES.md": {
+                "version-124---aiohttp-3143-security--compatibility-update-2026-07-31",
+            },
+            "docs/CHANGELOG_EXPERIMENTAL.md": {
+                "experimental-changelog", "promotion-to-130---2026-11-13",
+                "125-test3---2026-10-30", "125-test2--2026-10-28",
+                "125-test1--2026-10-27",
+            },
+        }
+        for name, ids in expected.items():
+            actual = heading_ids((ROOT / name).read_text())
+            self.assertTrue(ids <= actual, f"{name}: missing {ids - actual}")

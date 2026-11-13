@@ -86,6 +86,8 @@ Das Add-on kann direkt über den Home Assistant Add-on Store aktualisiert werden
 
 ---
 
+<a name="version-124---aiohttp-3143-security--compatibility-update-2026-07-31"></a>
+
 ## Version 1.2.4 - aiohttp 3.14.3 Security & Compatibility Update (2026-09-03)
 
 ### 🎯 Überblick

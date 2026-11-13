@@ -2,7 +2,7 @@ name: Release validation
 
 on:
   push:
-    branches: [main, "release/**", "maintenance/**"]
+    branches: [main, "release/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

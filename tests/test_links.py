@@ -19,8 +19,8 @@ class LinkContracts(unittest.TestCase):
         )
 
     def test_setext_and_explicit_html_anchors(self):
-        ids = heading_ids("Title\n=====\n<a id=\"legacy-anchor\"></a>\n")
-        self.assertEqual(ids, {"title", "legacy-anchor"})
+        ids = heading_ids("Title\n=====\n<a id=\"legacy-anchor\"></a>\n<a name=\"old-link\"></a>\n")
+        self.assertEqual(ids, {"title", "legacy-anchor", "old-link"})
 
     def test_reference_links_and_images(self):
         links = list(markdown_links("[Doc][ref]\n![Image](icon.png)\n[ref]: guide.md#start\n"))

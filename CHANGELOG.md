@@ -91,6 +91,8 @@ Experimental test branch only; not a production release.
 - No changes to device handling, MQTT topics, Home Assistant discovery, or add-on configuration.
 - Fully backward compatible with v1.2.4 and earlier v1.2.x releases.
 
+<a name="124---2026-08-02"></a>
+
 ## [1.2.4] - 2026-09-03
 
 ### Changed
