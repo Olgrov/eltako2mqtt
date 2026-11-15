@@ -444,7 +444,7 @@ class EltakoMiniSafe2Bridge(ABC):
             elif "weather" in device_type.lower():
                 weather_sensors = [
                     ("wind", "Wind", "m/s", None, "sensor"),
-                    ("rain", "Rain", None, None, "sensor"),
+                    ("rain", "Rain", None, "moisture", "binary_sensor"),
                     ("temperature", "Temperature", "°C", "temperature", "sensor"),
                     ("illumination", "Illumination", "lx", "illuminance", "sensor"),
                     ("illumination_east", "Illumination East", "lx", "illuminance", "sensor"),
@@ -464,6 +464,12 @@ class EltakoMiniSafe2Bridge(ABC):
                         config["device_class"] = devclass
                     if key == "rain":
                         config["icon"] = "mdi:weather-pouring"
+                        config["payload_on"] = "true"
+                        config["payload_off"] = "false"
+                        # Remove the legacy retained sensor config before discovery.
+                        # Safe to repeat on startup and Home Assistant birth messages.
+                        legacy_topic = f"homeassistant/sensor/eltako_weather_rain_{sid}/config"
+                        self.mqtt_client.publish(legacy_topic, "", retain=True)
                     if "wind" in key:
                         config["icon"] = "mdi:weather-windy"
                     topic = f"homeassistant/{platform}/eltako_weather_{key}_{sid}/config"
