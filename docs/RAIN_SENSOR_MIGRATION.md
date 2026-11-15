@@ -1,5 +1,7 @@
 # Rain sensor: moisture binary sensor
 
+Available in **v1.4.1**.
+
 The weather station rain entity is now discovered as a Home Assistant
 `binary_sensor` with `device_class: moisture`, rather than a text `sensor`.
 The MQTT state topic `eltako/<SID>/rain` and its `true` / `false` payloads
@@ -21,5 +23,5 @@ For Home Assistant state conditions use `on` / `off`, not the MQTT payload
 strings `true` / `false`. Recheck entity-specific names, area overrides and other
 customizations; history and entity registry settings are not migrated by this fix.
 
-No release is created and no add-on version is bumped by this patch alone.
+Install/build v1.4.1; restarting an older image does not install the fix.
 Dashboard summary inclusion depends on Home Assistant's own selection rules.

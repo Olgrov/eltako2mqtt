@@ -138,7 +138,10 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         for topic, payload, retain in bridge.mqtt_client.messages:
             if topic.endswith('/config'):
                 self.assertTrue(retain, msg=topic)
-                configs[topic] = json.loads(payload)
+                if payload in ('', b''):
+                    configs.pop(topic, None)
+                else:
+                    configs[topic] = json.loads(payload)
         self.assertTrue(configs)
         return configs
 
@@ -240,10 +243,16 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         }
         for key in ('wind', 'rain', 'temperature', 'illumination',
                     'illumination_east', 'illumination_south', 'illumination_west'):
-            topic = f'homeassistant/sensor/eltako_weather_{key}_31/config'
+            platform = 'binary_sensor' if key == 'rain' else 'sensor'
+            topic = f'homeassistant/{platform}/eltako_weather_{key}_31/config'
             expected_topics.add(topic)
             self.assertEqual(configs[topic]['state_topic'], f'eltako/31/{key}')
         self.assertEqual(set(configs), expected_topics)
+        rain = configs['homeassistant/binary_sensor/eltako_weather_rain_31/config']
+        self.assertEqual(rain['device_class'], 'moisture')
+        self.assertEqual(rain['payload_on'], 'true')
+        self.assertEqual(rain['payload_off'], 'false')
+        self.assertNotIn('homeassistant/sensor/eltako_weather_rain_31/config', configs)
         smoke = configs['homeassistant/binary_sensor/eltako_smoke_30/config']
         self.assertEqual(smoke['device_class'], 'smoke')
         self.assertEqual(smoke['unique_id'], 'eltako_smoke_30')
@@ -252,6 +261,24 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(temperature['state_topic'], 'eltako/30/temperature')
         for config in configs.values():
             self.assertNotIn('optimistic', config)
+
+    async def test_discovery_removes_existing_legacy_retained_rain_config(self):
+        b = self.bridge()
+        legacy = 'homeassistant/sensor/eltako_weather_rain_31/config'
+        b.mqtt_client.publish(legacy, json.dumps({'name': 'Rain'}), retain=True)
+        configs = await self.discovery_configs(b, {
+            '31': {'sid': '31', 'data': 'eltako_weather', 'state': {}},
+        })
+        self.assertNotIn(legacy, configs)
+        self.assertIn('homeassistant/binary_sensor/eltako_weather_rain_31/config', configs)
+        self.assertEqual(len(configs), 7)
+        self.assertEqual(b.discovery_count, 7)
+
+    async def test_discovery_still_rejects_invalid_nonempty_config_json(self):
+        b = self.bridge()
+        b.mqtt_client.publish('homeassistant/sensor/invalid/config', '{invalid', retain=True)
+        with self.assertRaises(json.JSONDecodeError):
+            await self.discovery_configs(b, {'01': blind(0)})
 
     def test_polled_switch_state_confirms_command(self):
         b = self.bridge()

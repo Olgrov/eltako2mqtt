@@ -28,6 +28,6 @@ LABEL \
   io.hass.description="Eltako MiniSafe2 to MQTT Bridge for Home Assistant" \
   io.hass.arch="aarch64|amd64" \
   io.hass.type="addon" \
-  io.hass.version="1.4.0"
+  io.hass.version="1.4.1"
 
 CMD [ "/run.sh" ]

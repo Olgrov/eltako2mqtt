@@ -233,6 +233,20 @@ def main():
         broker.wait("eltako/30/smoke", lambda p: p == "false")
         broker.wait("eltako/31/illumination_east", lambda p: int(p) == 1000)
         assert broker.subscriptions >= 2
+        broker.wait("homeassistant/sensor/eltako_weather_rain_31/config", lambda value: value == "")
+        rain = json.loads(broker.wait("homeassistant/binary_sensor/eltako_weather_rain_31/config", bool))
+        assert rain["device_class"] == "moisture"
+        assert rain["payload_on"] == "true" and rain["payload_off"] == "false"
+        assert rain["state_topic"] == "eltako/31/rain"
+        broker.wait("eltako/31/rain", lambda value: value == "false")
+        mark = len(broker.messages)
+        with minisafe.lock:
+            next(d for d in minisafe.devices if d["sid"] == "31")["state"]["rain_state"] = True
+        broker.wait("eltako/31/rain", lambda value: value == "true", after=mark)
+        mark = len(broker.messages)
+        with minisafe.lock:
+            next(d for d in minisafe.devices if d["sid"] == "31")["state"]["rain_state"] = False
+        broker.wait("eltako/31/rain", lambda value: value == "false", after=mark)
 
         mark = broker.command("01", "close")
         broker.wait("eltako/01/movement", lambda p: p == "closing", mark)
@@ -256,8 +270,8 @@ def main():
         result = docker("inspect", "--format", "{{.State.ExitCode}}", container, capture_output=True, text=True)
         assert result.stdout.strip() == "0", result.stdout
         logs = docker("logs", container, capture_output=True, text=True)
-        assert "Eltako2MQTT 1.4.0;" in logs.stdout + logs.stderr
-        print("PASS: default S6/Bashio entrypoint, MQTT discovery, real polls, cover close/slider/stop, dimmer, switch, sensors and clean shutdown.")
+        assert "Eltako2MQTT 1.4.1;" in logs.stdout + logs.stderr
+        print("PASS: default S6/Bashio entrypoint, MQTT discovery, real polls, cover close/slider/stop, dimmer, switch, rain discovery migration/wet/dry states, sensors and clean shutdown.")
         print("Synthetic poll_interval=1 is test-only; production recommendation remains 30+ seconds.")
     except Exception:
         if created:

@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 
 No unreleased changes.
 
+## [1.4.1] - 2026-11-15
+
+### Fixed
+- Discover weather-station rain as a moisture binary sensor with explicit `true`/`false` MQTT payload mapping.
+- Remove the legacy retained sensor discovery before publishing the binary sensor configuration.
+- Model retained discovery deletion correctly in regression tests and update the expected rain component type; keep invalid non-empty JSON checks strict.
+- Extend the production-container smoke test to verify rain discovery migration and both wet/dry payloads.
+
+### Changed
+- Bump add-on metadata, image label and version contracts to 1.4.1; update README, rain migration guidance and release notes.
+- Publish v1.4.1 through GitHub Actions only after both Python test jobs and both native container jobs succeed.
+
+### Migration
+- Update rain entity references from `sensor` to `binary_sensor` and use Home Assistant states `on`/`off`; raw MQTT state topic and `true`/`false` payloads stay unchanged.
+
 ## [1.4.0] - 2026-11-13
 
 ### Platform migration

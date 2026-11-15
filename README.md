@@ -1,7 +1,15 @@
 # Eltako2MQTT
 
-Eltako2MQTT v1.4.0 verbindet Eltako MiniSafe2 mit Home Assistant über MQTT.
+Eltako2MQTT v1.4.1 verbindet Eltako MiniSafe2 mit Home Assistant über MQTT.
 Das Add-on liest die im MiniSafe eingerichteten Geräte aus und veröffentlicht ihre Discovery-Konfiguration und Zustände.
+
+## Neu in v1.4.1
+
+- **Regensensor korrigiert:** Die Wetterstation meldet Regen als `binary_sensor` mit `device_class: moisture`; Home Assistant kann damit „Nass“ / „Trocken“ anzeigen.
+- **Automatische MQTT-Migration:** Die alte retained Sensor-Discovery wird entfernt, bevor die neue binäre Entität veröffentlicht wird. MQTT-Zustands-Topic und Payloads `true` / `false` bleiben unverändert.
+- **CI-Regression behoben:** Die Discovery-Tests bilden leere retained Löschmeldungen korrekt ab und erwarten den neuen Regensensor-Typ; der Container-Smoke-Test prüft die Migration und beide Regenzustände.
+
+**Update-Hinweis:** Referenzen auf die bisherige Regen-Entität in Automationen, Templates und Dashboards auf `binary_sensor.…` umstellen; Home-Assistant-Zustandsbedingungen verwenden `on` / `off`. Details: [Regensensor-Migration](docs/RAIN_SENSOR_MIGRATION.md).
 
 ## Neu in v1.4.0
 
@@ -25,7 +33,7 @@ Hinweise für bestehende 32-Bit-Systeme stehen in der [Migration](docs/INSTALLAT
 - **Robuste Helligkeit:** Ungültige Dimmerwerte überschreiben die letzte gültige Helligkeit nicht mit 0.
 - **MQTT-Bibliothek:** `paho-mqtt` 2.2.0 aus [PR #25](https://github.com/Olgrov/eltako2mqtt/pull/25); VERSION2-Callbacks bleiben erhalten.
 
-Details und Upgrade-Hinweise stehen in den [Release Notes](docs/RELEASE_NOTES.md).
+Details und Upgrade-Hinweise stehen in den [Release Notes v1.4.1](docs/releases/v1.4.1.md) und der [Release-Historie](docs/RELEASE_NOTES.md).
 FSR14M-Leistungsmessung ist nicht Teil dieses Releases.
 
 ## Unterstützte Geräte
@@ -33,7 +41,7 @@ FSR14M-Leistungsmessung ist nicht Teil dieses Releases.
 - **Rollläden/Jalousien:** `eltako_blind`, `eltako_tf_blind`, Positionssteuerung und Öffnen/Schließen/Stop.
 - **Schalter:** `eltako_switch`, `eltako_tf_switch`, FSR14, FSR14M-2x, FSR14SSR, F4SR14-LED und FAE14; `on`, `off`, `toggle`.
 - **Dimmer:** `eltako_dimmer`, `eltako_tf_dimmer`; `on`, `off` und Helligkeit 0–255.
-- **Wetterstationen:** `eltako_weather`; Temperatur, Wind, Regen und Beleuchtungsstärke.
+- **Wetterstationen:** `eltako_weather`; Temperatur, Wind, Regen als binärer Nässe-Sensor und Beleuchtungsstärke.
 - **Rauchmelder:** Gerätetypen mit `tf_smoke`, unter anderem FRWB; Rauchalarm und Temperatur.
 
 Mehrkanalige Geräte erscheinen entsprechend den vom MiniSafe gemeldeten SIDs.
@@ -42,11 +50,11 @@ RSSI wird als MQTT-Wert in Prozent veröffentlicht, nicht als automatisch entdec
 ## Installation und Update
 
 1. In Home Assistant unter Einstellungen → Add-ons → Add-on Store → Repositories das Repository `https://github.com/Olgrov/eltako2mqtt` hinzufügen.
-2. Auf einem unterstützten 64-Bit-System Eltako2MQTT installieren bzw. auf 1.4.0 aktualisieren und die Konfiguration speichern.
+2. Auf einem unterstützten 64-Bit-System Eltako2MQTT installieren bzw. auf 1.4.1 aktualisieren und die Konfiguration speichern.
 3. MQTT-Integration/Broker einrichten und das Add-on starten.
-4. Im Log `Eltako2MQTT 1.4.0; poll interval=30s; feedback timeout=120s` sowie die Discovery-Meldungen prüfen.
+4. Im Log `Eltako2MQTT 1.4.1; poll interval=30s; feedback timeout=120s` sowie die Discovery-Meldungen prüfen.
 
-Bestehende Produktionsinstallationen behalten Slug `eltako2mqtt`, MQTT-Client-ID, Command-Topics und Discovery-IDs.
+Bestehende Produktionsinstallationen behalten Slug `eltako2mqtt`, MQTT-Client-ID, Command-Topics und Discovery-IDs. Die Regen-Entität wechselt jedoch von `sensor` zu `binary_sensor`; dafür bestehende Referenzen prüfen.
 Ein eventuell installiertes Test-Add-on muss vor dem Start gestoppt und sein Autostart deaktiviert werden, da beide Varianten dieselben Geräte ansteuern.
 
 ## Konfiguration

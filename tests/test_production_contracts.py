@@ -47,16 +47,40 @@ class ProductionContracts(unittest.TestCase):
 
     def test_release_identity_versions_and_dependencies(self):
         config = yaml.safe_load((ROOT / "config.yaml").read_text())
-        self.assertEqual(config["version"], "1.4.0")
+        self.assertEqual(config["version"], "1.4.1")
         self.assertEqual(config["slug"], "eltako2mqtt")
         self.assertEqual(config["name"], "Eltako2MQTT")
         self.assertEqual(config["options"]["mqtt"]["client_id"], "eltako2mqtt")
         self.assertEqual(config["options"]["eltako"]["poll_interval"], 30)
         self.assertEqual(config["options"]["eltako"]["command_feedback_timeout"], 120)
-        self.assertIn('io.hass.version="1.4.0"', (ROOT / "Dockerfile").read_text())
+        self.assertIn('io.hass.version="1.4.1"', (ROOT / "Dockerfile").read_text())
         for requirement in (ROOT / "requirements.txt").read_text().splitlines():
             name, version = requirement.split("==")
             self.assertEqual(importlib.metadata.version(name), version)
+
+    def test_release_version_is_consistent_in_runtime_and_readme(self):
+        version = yaml.safe_load((ROOT / "config.yaml").read_text())["version"]
+        self.assertIn(f"Eltako2MQTT {version};", (ROOT / "state_feedback.py").read_text())
+        self.assertIn(f"Eltako2MQTT v{version}", (ROOT / "run.sh").read_text())
+        self.assertIn(f"Eltako2MQTT v{version}", (ROOT / "eltako2mqtt.py").read_text())
+        self.assertIn(f"Eltako2MQTT v{version}", (ROOT / "README.md").read_text())
+        self.assertIn(f"Eltako2MQTT {version};", (ROOT / "tests/container_smoke.py").read_text())
+        self.assertTrue((ROOT / f"docs/releases/v{version}.md").is_file())
+        self.assertIn(f"## [{version}]", (ROOT / "CHANGELOG.md").read_text())
+
+    def test_release_publication_requires_all_validation_jobs(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        release = workflow["jobs"]["release"]
+        self.assertEqual(set(release["needs"]), {"tests", "container"})
+        self.assertEqual(release["if"], "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')")
+        self.assertEqual(release["permissions"], {"contents": "write"})
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertIs(release["steps"][0]["with"]["persist-credentials"], False)
+        script = release["steps"][-1]["run"]
+        self.assertIn('gh release view "$TAG"', script)
+        self.assertIn('--target "$RELEASE_SHA"', script)
+        self.assertIn('--notes-file docs/releases/v1.4.1.md', script)
+        self.assertNotIn('--force', script)
 
     def test_legacy_behavior_cannot_be_instantiated_or_accidentally_reused(self):
         self.assertTrue(inspect.isabstract(BridgeBase))
